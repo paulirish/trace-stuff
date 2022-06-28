@@ -1,37 +1,8 @@
 /* eslint-disable */
 'use strict';
 
-let trace = require('./jansatta-profile-report.json');
+let trace = require('./scroll-tl-viewer.json');
 
-
-
-
-// const cats = {};
-// // aggregate
-// trace.traceEvents.forEach(e => {
-//   let eventCat = e.cat;
-//   if (e.name === 'ThreadControllerImpl::RunTask') eventCat += '::::::::RunTask';
-//   const cat = cats[eventCat] || {bytes: 0, events: 0};
-//   cat.bytes += JSON.stringify(e).length;
-//   cat.events += 1;
-//   cats[eventCat] = cat;
-// });
-
-// // obj to array
-// const totals = [];
-// Object.keys(cats).forEach(catname => {
-// 	const cat = cats[catname];
-// 	totals.push({name: catname, bytes: cat.bytes, events: cat.events});
-// });
-
-// // sort and log
-// console.log('Bytes', '\t', 'Count', '\t', 'Event Name')
-// totals.sort((a, b) => b.bytes - a.bytes).forEach((tot, i) => {
-// 	console.log(tot.bytes.toLocaleString(), i < 8 ? '\t' : '\t', tot.events, '\t', tot.name);
-// })
-
-
-// const {traceCategories} = require('../lighthouse-core/gather/driver');
 
 const traceCats = {};
 // aggregate
@@ -47,8 +18,10 @@ if (trace.length) {
 trace.traceEvents.forEach(e => {
   let eventCats = e.cat;
   for (let eventCat of eventCats.split(',')) {
-    // don't process cats we dont trace
-    // if (!traceCategories.includes(eventCat)) return;
+
+    // Uncomment the below line to break down by traceevent name too
+    // eventCat = `${e.name} - ${eventCat}`;
+
     if (e.name === 'ThreadControllerImpl::RunTask') eventCat += '::::::::RunTask';
     const cat = traceCats[eventCat] || {bytes: 0, events: 0};
     const bytes = JSON.stringify(e).length;
@@ -59,7 +32,6 @@ trace.traceEvents.forEach(e => {
     traceCats[eventCat] = cat;
   }
 });
-
 
 
 
