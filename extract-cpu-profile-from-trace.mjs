@@ -1,6 +1,5 @@
 
 import fs from 'fs';
-// fs.readFileSync('./jansatta-profile-report.json')
 import trace from './scroll-tl-viewer.json' assert { type: 'json' }
 
 
@@ -8,12 +7,10 @@ import trace from './scroll-tl-viewer.json' assert { type: 'json' }
 // https://chromedevtools.github.io/devtools-protocol/tot/Profiler/#type-Profile
 
 let events = trace.traceEvents || trace;
-
 console.assert(Array.isArray(events) && events.length);
 
-// disabled-by-default-v8.cpu_profiler
+// Cat = `disabled-by-default-v8.cpu_profiler`
 events = events.filter(e => e.cat.includes('v8.cpu_profiler'));
-
 
 // What pid's do we have?
 const pids = events.reduce((prev, curr) => prev.add(curr.pid), new Set())
@@ -43,17 +40,27 @@ pids.forEach(pid => {
         const chunkData = chunk.args.data.cpuProfile;
         profile.nodes.push(... chunkData.nodes || []);
         profile.samples.push(... chunkData.samples || []);
+        // profile.lines is apparently also a thing but i dont see that it does anything.. so ignoring for now.
+
+        
         // Why is timeDeltas not in .args.data.cpuProfile???? beats me.
         profile.timeDeltas.push(...  chunk.args.data.timeDeltas || []);
         // shrug. https://source.chromium.org/chromium/chromium/src/+/main:v8/src/profiler/profile-generator.cc;l=755;bpv=0;bpt=1
         profile.endTime = chunkData.endTime || profile.endTime;
     });
     
+    // Stole this from timelinemodel
     if (profile.endTime === -1){
         profile.endTime = profile.timeDeltas.reduce((x, y) => x + y, profile.startTime);
     }
 
-    // console.log({profile});
-    fs.writeFileSync(`scroll-tl-viewer-${pid}.cpuprofile`, JSON.stringify(profile));
+    // for compat with vscode's viewer. 
+    for (const node of profile.nodes) {
+        node.callFrame.url = node.callFrame.url || '';
+    }
+
+    const filename = `scroll-tl-viewer-${pid}.cpuprofile`;
+    fs.writeFileSync(filename, JSON.stringify(profile));
+    console.log('written: ', filename);
 });
 
