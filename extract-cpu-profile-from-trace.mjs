@@ -1,30 +1,57 @@
 
 import fs from 'fs';
-import trace from './scroll-tl-viewer.json' assert { type: 'json' }
+import {strict as assert} from 'assert';
+const tracefilename = './myjansatta.json';
+import trace from './myjansatta.json' assert { type: 'json' }
 
 
 // A saved .cpuprofile from JS Profiler panel matches `Profiler.Profile` exactly.
 // https://chromedevtools.github.io/devtools-protocol/tot/Profiler/#type-Profile
 
+// node.hitCount and node.children are populated in Profiler.stop's payload (and when saved from Jsprofiler pane), 
+// but not when it comes in a trace. This is weird yes.
+
 let events = trace.traceEvents || trace;
-console.assert(Array.isArray(events) && events.length);
+assert.ok(Array.isArray(events) && events.length);
+
+
+const metaEvts = events.filter(e => e.cat === '__metadata');
 
 // Cat = `disabled-by-default-v8.cpu_profiler`
 events = events.filter(e => e.cat.includes('v8.cpu_profiler'));
 
+
+console.log(events.length);
+// e.name of 'ProfileChunk' or 'Profile';
+// ProfileChunk events can be on a diff thread id than the header. but the header is canonical.
+const profileHeadEvts = events.filter(e => e.name === 'Profile');
 // What pid's do we have?
-const pids = events.reduce((prev, curr) => prev.add(curr.pid), new Set())
+const pidtids = profileHeadEvts.reduce((prev, curr) => prev.add(`p${curr.pid}t${curr.tid}`), new Set())
 
 // See also `extractCpuProfile` in CDT's TimelineModel
-pids.forEach(pid => {
-    console.log(`Looking at pid ${pid}`);
-    const profileEvts = events.filter(e => e.pid === pid);
+pidtids.forEach(pidtid => {
+    const pid = parseInt(pidtid.split('t')[0].replace('p', ''), 10);
+    const tid = parseInt(pidtid.split('t')[1], 10);
+    const threadName = metaEvts.find(e => e.pid === pid && e.tid === tid)?.args.name;
+    console.log(`Looking at: "pid":${pid},"tid":${tid},  …  ${threadName}`);
 
-    // e.name of 'ProfileChunk' or 'Profile';
-    const profileEvt = profileEvts.find(e => e.name === 'Profile');
-    const chunkEvts = profileEvts.filter(e => e.name === 'ProfileChunk');
-    console.assert(profileEvt);
-    console.assert(chunkEvts.length);
+    const profileHeadEvt = profileHeadEvts.find(e => e.pid === pid && e.tid === tid);
+
+    
+    // flow event connection. id's like 0x2
+    // OKAY this is apparently wrong. but i dont know how these are connected. so weird.
+    const chunkEvts = events.filter(e => e.name === 'ProfileChunk' && e.id === profileHeadEvt.id); 
+
+
+    if (!profileHeadEvt) {
+        console.error('missing profile header evt.... probably resolvable but not now');
+        return;
+    }
+    if (!chunkEvts.length){
+        console.error(`No chunk events for ${pidtid}!`);
+        return;
+    } 
+        
 
     /** {Crdp.Profiler.Profile} */
     const profile = {
@@ -33,7 +60,7 @@ pids.forEach(pid => {
         endTime: -1,
         samples: [],
         timeDeltas: [],
-        ...profileEvt.args.data
+        ...profileHeadEvt.args.data
     };
 
     chunkEvts.forEach(chunk => {
@@ -42,7 +69,7 @@ pids.forEach(pid => {
         profile.samples.push(... chunkData.samples || []);
         // profile.lines is apparently also a thing but i dont see that it does anything.. so ignoring for now.
 
-        
+
         // Why is timeDeltas not in .args.data.cpuProfile???? beats me.
         profile.timeDeltas.push(...  chunk.args.data.timeDeltas || []);
         // shrug. https://source.chromium.org/chromium/chromium/src/+/main:v8/src/profiler/profile-generator.cc;l=755;bpv=0;bpt=1
@@ -59,7 +86,7 @@ pids.forEach(pid => {
         node.callFrame.url = node.callFrame.url || '';
     }
 
-    const filename = `scroll-tl-viewer-${pid}.cpuprofile`;
+    const filename = `${tracefilename}-${pid}-${threadName}.cpuprofile`;
     fs.writeFileSync(filename, JSON.stringify(profile));
     console.log('written: ', filename);
 });
