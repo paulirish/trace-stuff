@@ -1,15 +1,19 @@
 
 import fs from 'fs';
 import {strict as assert} from 'assert';
-const tracefilename = './myjansatta.json';
-import trace from './myjansatta.json' assert { type: 'json' }
 
+// import trace from './myjansatta.json' assert { type: 'json' }
+
+const passedArg = process.argv[2];
+const tracefilename = passedArg ? passedArg : './myjansatta.json';
+let trace = JSON.parse(fs.readFileSync(tracefilename, 'utf-8'));
 
 // A saved .cpuprofile from JS Profiler panel matches `Profiler.Profile` exactly.
 // https://chromedevtools.github.io/devtools-protocol/tot/Profiler/#type-Profile
 
 // node.hitCount and node.children are populated in Profiler.stop's payload (and when saved from Jsprofiler pane), 
 // but not when it comes in a trace. This is weird yes.
+// CPUProfileDataModel.translateProfileTree() calculates these, according to nancyly@'s tech talk. sweet!
 
 let events = trace.traceEvents || trace;
 assert.ok(Array.isArray(events) && events.length);
