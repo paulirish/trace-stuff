@@ -1,12 +1,18 @@
+// run like:
+//     node extract-cpu-profile-from-trace.mjs ~/Downloads/Profile-20200214T165958.json
+// it'll create 1 or more .cpuprofiles next to the trace
+
 
 import fs from 'fs';
 import {strict as assert} from 'assert';
 
-// import trace from './myjansatta.json' assert { type: 'json' }
+
 
 const passedArg = process.argv[2];
 const tracefilename = passedArg ? passedArg : './myjansatta.json';
 let trace = JSON.parse(fs.readFileSync(tracefilename, 'utf-8'));
+let events = trace.traceEvents || trace;
+assert.ok(Array.isArray(events) && events.length);
 
 // A saved .cpuprofile from JS Profiler panel matches `Profiler.Profile` exactly.
 // https://chromedevtools.github.io/devtools-protocol/tot/Profiler/#type-Profile
@@ -15,8 +21,6 @@ let trace = JSON.parse(fs.readFileSync(tracefilename, 'utf-8'));
 // but not when it comes in a trace. This is weird yes.
 // CPUProfileDataModel.translateProfileTree() calculates these, according to nancyly@'s tech talk. sweet!
 
-let events = trace.traceEvents || trace;
-assert.ok(Array.isArray(events) && events.length);
 
 
 const metaEvts = events.filter(e => e.cat === '__metadata');
