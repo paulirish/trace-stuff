@@ -17,6 +17,7 @@ let trace = JSON.parse(fs.readFileSync(filename, 'utf-8'));
 
 function sumItUp(shouldBreakdownByEventName = false) {
   const traceCats = {};
+  const tracePhs = {};
   // aggregate
   let totalBytes = 0;
   let totalEvents = 0;
@@ -46,9 +47,11 @@ function sumItUp(shouldBreakdownByEventName = false) {
       totalEvents += 1;
       traceCats[eventCat] = cat;
     }
+    tracePhs[e.ph] = tracePhs[e.ph] || 0;
+    tracePhs[e.ph]++;
   });
 
-  groupAndOutput(traceCats, totalBytes, totalEvents);
+  groupAndOutput(traceCats, totalBytes, totalEvents, tracePhs);
 } 
 
 
@@ -57,7 +60,7 @@ sumItUp(true);
 
 
 
-function groupAndOutput(traceCats, totalBytes, totalEvents) {
+function groupAndOutput(traceCats, totalBytes, totalEvents, tracePhs) {
   // obj to array
   const traceTotals = [];
   Object.keys(traceCats).forEach(catname => {
@@ -99,4 +102,8 @@ function groupAndOutput(traceCats, totalBytes, totalEvents) {
     '\t', 
     '[(Rows that were < 1% of bytes)]'
   );
+
+  console.log('\n Phases:')
+  Object.entries(tracePhs).sort((a, b) => b[1] - a[1]).forEach(([ph, count]) => console.log(`ph(${ph}): ${count.toLocaleString()}`) );
+  // console.log({tracePhs});
 }
