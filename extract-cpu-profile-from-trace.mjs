@@ -4,9 +4,10 @@
 
 
 import fs from 'fs';
+import stream from 'stream';
 import {strict as assert} from 'assert';
 
-
+import {arrayOfObjectsJsonGenerator} from '../lighthouse/core/lib/asset-saver.js'; // GOTTA EXPORT THIS 
 
 const passedArg = process.argv[2];
 const tracefilename = passedArg ? passedArg : './myjansatta.json';
@@ -37,7 +38,7 @@ const profileHeadEvts = events.filter(e => e.name === 'Profile');
 const pidtids = profileHeadEvts.reduce((prev, curr) => prev.add(`p${curr.pid}t${curr.tid}`), new Set())
 
 // See also `extractCpuProfile` in CDT's TimelineModel
-pidtids.forEach(pidtid => {
+pidtids.forEach(async pidtid => {
     const pid = parseInt(pidtid.split('t')[0].replace('p', ''), 10);
     const tid = parseInt(pidtid.split('t')[1], 10);
     const threadName = metaEvts.find(e => e.pid === pid && e.tid === tid)?.args.name;
@@ -75,7 +76,8 @@ pidtids.forEach(pidtid => {
         const chunkData = chunk.args.data.cpuProfile;
         profile.nodes.push(... chunkData.nodes || []);
         profile.samples.push(... chunkData.samples || []);
-        // profile.lines is apparently also a thing but i dont see that it does anything.. so ignoring for now.
+        // profile.lines is apparently also a thing (later me. whatttttttttt?) but i dont see that it does anything.. so ignoring for now.
+        // todo delete this comment
 
 
         // Why is timeDeltas not in .args.data.cpuProfile???? beats me.
@@ -91,11 +93,49 @@ pidtids.forEach(pidtid => {
 
     // for compat with vscode's viewer. 
     for (const node of profile.nodes) {
+        // TODO: RESTORE this 
         node.callFrame.url = node.callFrame.url || '';
+        // node.callFrame.url = '';
     }
+    // "crop" the cpu profile. TODO: probably dont want this....
+    // profile.samples = profile.samples.slice(0, 50_000);
+    // profile.timeDeltas = profile.timeDeltas.slice(0, 50_000);
+
+    console.log('counts:', profile.nodes.length, profile.samples.length, profile.timeDeltas.length)
 
     const filename = `${tracefilename}-${pid}-${threadName}.cpuprofile`;
-    fs.writeFileSync(filename, JSON.stringify(profile));
-    console.log('written: ', filename);
+    
+    // format it
+    await saveCpuProfile(profile, filename);
+    const readRes = fs.readFileSync(filename, 'utf-8');
+    // fs.writeFileSync(filename, JSON.stringify(profile));
+    console.log(`written ${readRes.length.toLocaleString()} bytes to: ${filename}`);
 });
 
+
+/**
+ * Save a devtoolsLog as JSON by streaming to disk at devtoolLogFilename.
+ * @param {any} profile
+ * @param {string} cpuProfileFilename
+ * @return {Promise<void>}
+ */
+function saveCpuProfile(profile, cpuProfileFilename) {
+  const writeStream = fs.createWriteStream(cpuProfileFilename);
+
+  return stream.promises.pipeline(function* () {
+    yield '{\n';
+
+    for (const [key, val] of Object.entries(profile)) {
+      if (key === 'nodes') { // i dont know ideal formatting for samples and timeDeltas
+        // this relies on nodes always being first..
+        yield `"${key}": `;
+        yield* arrayOfObjectsJsonGenerator(val);
+      } else {
+        yield `,\n"${key}": `;
+        yield JSON.stringify(val);
+      }
+    }
+
+    yield '\n}\n';
+  }, writeStream);
+}
