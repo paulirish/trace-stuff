@@ -5,12 +5,12 @@ import fs from 'fs';
 
 /**
  * Generates a JSON representation of an array of objects with the objects
- * printed one per line for improved readability (but not *too* verbose).
- * @param {readonly TraceEngine.Types.TraceEvents.TraceEventData[]} arrayOfObjects
- * @return IterableIterator<string>
+ * printed one per line for a more readable (but not too verbose) version.
+ * @param {Array<unknown>} arrayOfObjects
+ * @return {IterableIterator<string>}
  */
-export function* arrayOfObjectsJsonGenerator(arrayOfObjects) {
-  const ITEMS_PER_ITERATION = 10_000;
+function* arrayOfObjectsJsonGenerator(arrayOfObjects) {
+  const ITEMS_PER_ITERATION = 500; // should be 10_000
 
   // Stringify and emit items separately to avoid a giant string in memory.
   yield '[\n';
@@ -37,27 +37,32 @@ export function* arrayOfObjectsJsonGenerator(arrayOfObjects) {
 }
 
 /**
- * Generates a JSON representation of traceData line-by-line for a nicer printed
+ * Generates a JSON representation of trace line-by-line for a nicer printed
  * version with one trace event per line.
  * @param {readonly TraceEngine.Types.TraceEvents.TraceEventData[]} traceEvents 
- * @param {Readonly<TraceEngine.Types.File.MetaData>|null} metadata 
+ * @param {Readonly<TraceEngine.Types.File.MetaData>|null} metadata
  * @return IterableIterator<string>
  */
-export function* traceJsonGenerator(traceEvents, metadata) {
+export function* traceJsonGenerator(trace) {
+  const {traceEvents, metadata, ...rest} = trace;
+  if (Object.keys(rest).length) throw new Error('unexpected contents in tracefile. not traceEvents or metadata! : ' + JSON.stringify(rest));
+
   yield '{"traceEvents": ';
   yield* arrayOfObjectsJsonGenerator(traceEvents);
-  yield `,\n"metadata": ${JSON.stringify(metadata || {}, null, 2)}`;
+  if (metadata) {
+    yield `,\n"metadata": ${JSON.stringify(metadata, null, 2)}`;
+  }
   yield '}\n';
 }
 
 /**
  * Save a trace as JSON by streaming to disk at traceFilename.
- * @param {LH.Trace} traceData
+ * @param {LH.Trace} trace
  * @param {string} traceFilename
  * @return {Promise<void>}
  */
-export async function saveTrace(traceData, traceFilename) {
-  const traceIter = traceJsonGenerator(traceData);
+export async function saveTrace(trace, traceFilename) {
+  const traceIter = traceJsonGenerator(trace);
   const writeStream = fs.createWriteStream(traceFilename);
 
   return stream.promises.pipeline(traceIter, writeStream);

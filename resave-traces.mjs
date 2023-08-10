@@ -1,7 +1,7 @@
 import fs from 'fs';
 import {strict as assert} from 'assert';
 
-import {saveTrace, readJson} from './save-file-formatter.mjs';
+import {saveTrace, readJson} from './trace-file-utils.mjs';
 import {TraceProcessor} from '../lighthouse/core/lib/tracehouse/trace-processor.js';
 
 const passedArg = process.argv[2];
@@ -13,17 +13,15 @@ console.log('reading', tracefilename);
 const text = fs.readFileSync(tracefilename, 'utf-8');
 const newlines = text.split('\n').length;
 
-console.log({newlines});
 let trace = JSON.parse(text);
-let events = trace.traceEvents || trace;
 
 if (Array.isArray(trace)) {
   trace = {
     traceEvents: trace,
   };
 }
-console.log('ok', trace.traceEvents.length);
-assert.ok(Array.isArray(events) && events.length);
+assert.ok(Array.isArray(trace.traceEvents) && trace.traceEvents.length);
+console.log('Refomatting', trace.traceEvents.length, 'events');
 
 // // remove stuff i guess?
 // const sorted = TraceProcessor.filteredTraceSort(trace.traceEvents, e => {
@@ -38,18 +36,17 @@ assert.ok(Array.isArray(events) && events.length);
 // });
 
 const afterFilename = `${filename}.formatted.json`;
-debugger;
 await saveTrace(trace, afterFilename);
 
 const after = readJson(afterFilename);
 const afterText = fs.readFileSync(afterFilename, 'utf-8');
 const afterNewlines = afterText.split('\n').length;
-console.log(newlines, '==>', afterNewlines);
+console.log('lineCount: ', newlines, '==>', afterNewlines);
 
 if (text !== afterText && newlines !== afterNewlines) {
-  console.log(`mv -f ${afterFilename} ${filename}\n`);
+  console.log(`File with NEW contents written.\n  mv -f ${afterFilename} ${filename}\nChecking equality…`);
 } else {
-  console.log('');
+  console.log('File with SAME contents written. Checking equality…');
 }
 
 try {
