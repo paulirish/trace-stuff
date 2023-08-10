@@ -10,7 +10,7 @@ import fs from 'fs';
  * @return {IterableIterator<string>}
  */
 function* arrayOfObjectsJsonGenerator(arrayOfObjects) {
-  const ITEMS_PER_ITERATION = 500; // should be 10_000
+  const ITEMS_PER_ITERATION = 10_000;
 
   // Stringify and emit items separately to avoid a giant string in memory.
   yield '[\n';
@@ -69,12 +69,30 @@ export async function saveTrace(trace, traceFilename) {
 }
 
 /**
- * Generates a JSON representation of CPU profile.
- * @param {Protocol.Profiler.Profile} cpuprofile 
- * @returns string 
+ * Save a devtoolsLog as JSON by streaming to disk at devtoolLogFilename.
+ * @param {any} profile
+ * @param {string} cpuProfileFilename
+ * @return {Promise<void>}
  */
-export function cpuprofileJsonGenerator(cpuprofile){
-  return JSON.stringify(cpuprofile);
+function saveCpuProfile(profile, cpuProfileFilename) {
+  const writeStream = fs.createWriteStream(cpuProfileFilename);
+
+  return stream.promises.pipeline(function* () {
+    yield '{\n';
+
+    for (const [key, val] of Object.entries(profile)) {
+      if (key === 'nodes') { // i dont know ideal formatting for samples and timeDeltas
+        // this relies on nodes always being first..
+        yield `"${key}": `;
+        yield* arrayOfObjectsJsonGenerator(val);
+      } else {
+        yield `,\n"${key}": `;
+        yield JSON.stringify(val);
+      }
+    }
+
+    yield '\n}\n';
+  }, writeStream);
 }
 
 

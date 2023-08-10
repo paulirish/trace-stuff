@@ -4,10 +4,8 @@
 
 
 import fs from 'fs';
-import stream from 'stream';
 import {strict as assert} from 'assert';
-
-import {arrayOfObjectsJsonGenerator} from '../lighthouse/core/lib/asset-saver.js'; // GOTTA EXPORT THIS 
+import {saveCpuProfile} from './trace-file-utils.mjs';
 
 const passedArg = process.argv[2];
 const tracefilename = passedArg ? passedArg : './myjansatta.json';
@@ -112,30 +110,3 @@ pidtids.forEach(async pidtid => {
     console.log(`written ${readRes.length.toLocaleString()} bytes to: ${filename}`);
 });
 
-
-/**
- * Save a devtoolsLog as JSON by streaming to disk at devtoolLogFilename.
- * @param {any} profile
- * @param {string} cpuProfileFilename
- * @return {Promise<void>}
- */
-function saveCpuProfile(profile, cpuProfileFilename) {
-  const writeStream = fs.createWriteStream(cpuProfileFilename);
-
-  return stream.promises.pipeline(function* () {
-    yield '{\n';
-
-    for (const [key, val] of Object.entries(profile)) {
-      if (key === 'nodes') { // i dont know ideal formatting for samples and timeDeltas
-        // this relies on nodes always being first..
-        yield `"${key}": `;
-        yield* arrayOfObjectsJsonGenerator(val);
-      } else {
-        yield `,\n"${key}": `;
-        yield JSON.stringify(val);
-      }
-    }
-
-    yield '\n}\n';
-  }, writeStream);
-}

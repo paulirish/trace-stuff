@@ -1,6 +1,5 @@
 import fs from 'fs';
 import {strict as assert} from 'assert';
-
 import {saveTrace, readJson} from './trace-file-utils.mjs';
 import {TraceProcessor} from '../lighthouse/core/lib/tracehouse/trace-processor.js';
 
