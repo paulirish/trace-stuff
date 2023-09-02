@@ -101,7 +101,7 @@ pidtids.forEach(async pidtid => {
 
     console.log('counts:', profile.nodes.length, profile.samples.length, profile.timeDeltas.length)
 
-    const filename = `${tracefilename}-${pid}-${threadName}.cpuprofile`;
+    const filename = `${tracefilename}-pid-${pid}-tid-${tid}-${threadName}.cpuprofile`;
     
     // format it
     await saveCpuProfile(profile, filename);

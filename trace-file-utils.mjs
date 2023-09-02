@@ -74,7 +74,7 @@ export async function saveTrace(trace, traceFilename) {
  * @param {string} cpuProfileFilename
  * @return {Promise<void>}
  */
-function saveCpuProfile(profile, cpuProfileFilename) {
+export function saveCpuProfile(profile, cpuProfileFilename) {
   const writeStream = fs.createWriteStream(cpuProfileFilename);
 
   return stream.promises.pipeline(function* () {
