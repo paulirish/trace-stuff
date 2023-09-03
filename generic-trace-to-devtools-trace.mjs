@@ -77,7 +77,7 @@ busiestMainThread.events.forEach(e => {
 const busiestFrame = Array.from(frameToCount.entries())
   .sort(([aFrame, aCount], [bBrame, bCount]) => bCount - aCount)
   .at(0);
-const busiestFrameId = busiestFrame[0];
+const busiestFrameId = busiestFrame?.at(0) ?? 'NOFRAMEIDFOUND';
 
 
 /**
