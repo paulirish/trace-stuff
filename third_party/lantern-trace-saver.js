@@ -4,8 +4,11 @@
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
 
+/** @typedef {import('./dependency-graph/base-node.js').Node} Node */
+/** @typedef {import('./dependency-graph/simulator/simulator.js').CompleteNodeTiming} CompleteNodeTiming */
+
 /**
- * @param {LH.Gatherer.Simulation.Result['nodeTimings']} nodeTimings
+ * @param {Map<Node, CompleteNodeTiming>} nodeTimings
  * @return {LH.Trace}
  */
 function convertNodeTimingsToTrace(nodeTimings) {
@@ -31,7 +34,8 @@ function convertNodeTimingsToTrace(nodeTimings) {
     } else {
       // Ignore data URIs as they don't really add much value
       if (/^data/.test(node.record.url)) continue;
-      traceEvents.push(...createFakeNetworkEvents(node.record, timing));
+      traceEvents.push(...createFakeNetworkEvents(requestId, node.record, timing));
+      requestId++;
     }
   }
 
@@ -117,12 +121,34 @@ function convertNodeTimingsToTrace(nodeTimings) {
   }
 
   /**
+   * @param {number} requestId
    * @param {LH.Artifacts.NetworkRequest} record
-   * @param {LH.Gatherer.Simulation.NodeTiming} timing
+   * @param {CompleteNodeTiming} timing
+   * @return {LH.TraceEvent}
+   */
+  function createWillSendRequestEvent(requestId, record, timing) {
+    return {
+      ...baseEvent,
+      ph: 'I',
+      s: 't',
+      // No `dur` on network instant events but add to keep types happy.
+      dur: 0,
+      name: 'ResourceWillSendRequest',
+      ts: toMicroseconds(timing.startTime),
+      args: {data: {requestId: String(requestId)}},
+    };
+  }
+
+  /**
+   * @param {number} requestId
+   * @param {LH.Artifacts.NetworkRequest} record
+   * @param {CompleteNodeTiming} timing
    * @return {LH.TraceEvent[]}
    */
-  function createFakeNetworkEvents(record, timing) {
-    requestId++;
+  function createFakeNetworkEvents(requestId, record, timing) {
+    if (!('connectionTiming' in timing)) {
+      throw new Error('Network node timing incomplete');
+    }
 
     // 0ms requests get super-messed up rendering
     // Use 0.3ms instead so they're still hoverable, https://github.com/GoogleChrome/lighthouse/pull/5350#discussion_r194563201
@@ -130,7 +156,8 @@ function convertNodeTimingsToTrace(nodeTimings) {
     if (startTime === endTime) endTime += 0.3;
 
     const requestData = {requestId: requestId.toString(), frame};
-    /** @type {StrictOmit<LH.TraceEvent, 'name'|'ts'|'args'>} */
+    // No `dur` on network instant events but add to keep types happy.
+    /** @type {LH.Util.StrictOmit<LH.TraceEvent, 'name'|'ts'|'args'>} */
     const baseRequestEvent = {...baseEvent, ph: 'I', s: 't', dur: 0};
 
     const sendRequestData = {
@@ -140,6 +167,13 @@ function convertNodeTimingsToTrace(nodeTimings) {
       priority: record.priority,
     };
 
+    const {dnsResolutionTime, connectionTime, sslTime, timeToFirstByte} = timing.connectionTiming;
+    let sslStart = -1;
+    let sslEnd = -1;
+    if (connectionTime !== undefined && sslTime !== undefined) {
+      sslStart = connectionTime - sslTime;
+      sslEnd = connectionTime;
+    }
     const receiveResponseData = {
       ...requestData,
       statusCode: record.statusCode,
@@ -147,17 +181,45 @@ function convertNodeTimingsToTrace(nodeTimings) {
       encodedDataLength: record.transferSize,
       fromCache: record.fromDiskCache,
       fromServiceWorker: record.fetchedViaServiceWorker,
+      timing: {
+        // `requestTime` is in seconds.
+        requestTime: toMicroseconds(startTime) / (1000 * 1000),
+        // Remaining values are milliseconds after `requestTime`.
+        dnsStart: dnsResolutionTime === undefined ? -1 : 0,
+        dnsEnd: dnsResolutionTime ?? -1,
+        connectStart: dnsResolutionTime ?? -1,
+        connectEnd: connectionTime ?? -1,
+        sslStart,
+        sslEnd,
+        sendStart: connectionTime ?? 0,
+        sendEnd: connectionTime ?? 0,
+        receiveHeadersEnd: timeToFirstByte,
+        workerStart: -1,
+        workerReady: -1,
+        proxyStart: -1,
+        proxyEnd: -1,
+        pushStart: 0,
+        pushEnd: 0,
+      },
     };
 
     const resourceFinishData = {
-      ...requestData,
+      requestId: requestId.toString(),
+      encodedDataLength: record.transferSize,
       decodedBodyLength: record.resourceSize,
       didFail: !!record.failed,
       finishTime: toMicroseconds(endTime) / (1000 * 1000),
     };
 
     /** @type {LH.TraceEvent[]} */
-    const events = [
+    const events = [];
+
+    // Navigation request needs an additional ResourceWillSendRequest event.
+    if (requestId === 1) {
+      events.push(createWillSendRequestEvent(requestId, record, timing));
+    }
+
+    events.push(
       {
         ...baseRequestEvent,
         name: 'ResourceSendRequest',
@@ -169,13 +231,14 @@ function convertNodeTimingsToTrace(nodeTimings) {
         name: 'ResourceFinish',
         ts: toMicroseconds(endTime),
         args: {data: resourceFinishData},
-      },
-    ];
+      }
+    );
 
     if (!record.failed) {
       events.push({
         ...baseRequestEvent,
         name: 'ResourceReceiveResponse',
+        // Event `ts` isn't meaningful, so just pick a time.
         ts: toMicroseconds((startTime + endTime) / 2),
         args: {data: receiveResponseData},
       });
