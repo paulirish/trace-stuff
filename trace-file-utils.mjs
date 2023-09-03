@@ -46,7 +46,7 @@ function* arrayOfObjectsJsonGenerator(arrayOfObjects) {
  */
 export function* traceJsonGenerator(trace) {
   const {traceEvents, metadata, ...rest} = trace;
-  if (Object.keys(rest).length) throw new Error('unexpected contents in tracefile. not traceEvents or metadata! : ' + JSON.stringify(rest));
+  if (Object.keys(rest).length) throw new Error('unexpected contents in tracefile. not traceEvents or metadata! : ' + JSON.stringify(rest).slice(0, 1000));
 
   yield '{"traceEvents": ';
   yield* arrayOfObjectsJsonGenerator(traceEvents);
