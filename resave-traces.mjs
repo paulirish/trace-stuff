@@ -9,6 +9,7 @@ const filename = tracefilename;
 
 console.log('reading', tracefilename);
 
+// TODO: use loadTraceEventsFromFile instead.
 const text = fs.readFileSync(tracefilename, 'utf-8');
 const newlines = text.split('\n').length;
 

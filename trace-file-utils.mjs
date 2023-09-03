@@ -2,6 +2,7 @@
 
 import stream from 'stream';
 import fs from 'fs';
+import zlib from 'zlib';
 
 /**
  * Generates a JSON representation of an array of objects with the objects
@@ -99,9 +100,43 @@ export function saveCpuProfile(profile, cpuProfileFilename) {
 /**
  * A simple version of LH's test-util's readJson. TBD if it needs more import.meta complexity.
  *
+ * @deprecated use `loadTraceEventsFromFile` instead.
  * @param {string} filePath Can be an absolute or relative path.
  */
 export function readJson(filePath) {
   // filePath = path.resolve(dir, filePath);
   return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
 }
+
+/**
+ * @param {string=} filename
+ * @returns TraceEvent[]
+ */
+export function loadTraceEventsFromFile(filename) {
+  const fileBuf = fs.readFileSync(filename);
+  let data;
+  if (isGzip(fileBuf)) {
+    data = zlib.gunzipSync(fileBuf);
+  } else {
+    data = fileBuf.toString('utf8');
+  }
+  const json = JSON.parse(data);
+  const traceEvents = json.traceEvents ?? json;
+  console.assert(Array.isArray(traceEvents) && traceEvents.length);
+  return traceEvents;
+}
+
+/**
+ * Read the first 3 bytes looking for the gzip signature in the file header
+ * https://www.rfc-editor.org/rfc/rfc1952#page-6
+ * @param {ArrayBuffer} ab
+ * @returns boolean
+ */
+function isGzip(ab) {
+  const buf = new Uint8Array(ab);
+  if (!buf || buf.length < 3) {
+    return false;
+  }
+  return buf[0] === 0x1F && buf[1] === 0x8B && buf[2] === 0x08;
+}
+
