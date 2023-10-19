@@ -24,16 +24,18 @@ assert.ok(Array.isArray(trace.traceEvents) && trace.traceEvents.length);
 console.log('Refomatting', trace.traceEvents.length, 'events');
 
 // // remove stuff i guess?
-// const sorted = TraceProcessor.filteredTraceSort(trace.traceEvents, e => {
+trace.traceEvents = TraceProcessor.filteredTraceSort(trace.traceEvents, e => {
 //     // // strip these events out of the new one
 //     // if ([
 //     //   //'V8.ParseFunction', 'V8.CompileIgnition', 'V8.CompileIgnitionFinalization', 'v8.compile',
 //     //   'V8.CompileCode'].includes(e.name)) return false;
 
-//     // // Crop trace by time range ( think)
-//     // return e.ts === 0 || (e.ts > 437555855961 && e.ts < 437555867350) || e.name.startsWith('Profile') ||
-//     //   ['FrameCommittedInBrowser', 'TracingStartedInBrowser'].includes(e.name);
-// });
+//     // // Crop trace by time range. works, but the CPU Profiles dont get cropped which gets kinda weird.
+    // return e.ts === 0 || e.ts > 79939510042 || e.name.startsWith('Profile') ||
+    //   ['FrameCommittedInBrowser', 'TracingStartedInBrowser'].includes(e.name);
+  
+  return true;
+});
 
 const afterFilename = `${filename}.formatted.json`;
 await saveTrace(trace, afterFilename);

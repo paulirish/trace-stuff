@@ -13,9 +13,14 @@ console.log('size:' ,  ( stat.size / 1_000_000).toLocaleString(), 'MB');
 console.log('first by event name + category. then by category');
 
 let trace = JSON.parse(fs.readFileSync(filename, 'utf-8'));
+console.log('event count: ', trace.traceEvents.length.toLocaleString())
 
 
-function sumItUp(shouldBreakdownByEventName = false) {
+iterateTrace();
+iterateTrace({aggregateBy: true});
+
+
+function iterateTrace(opts = {aggregateBy: false}) {
   const traceCats = {};
   const tracePhs = {};
   // aggregate
@@ -28,13 +33,12 @@ function sumItUp(shouldBreakdownByEventName = false) {
       traceEvents,
     };
   }
-  console.log('event count: ', trace.traceEvents.length.toLocaleString())
-
+  
   trace.traceEvents.forEach(e => {
     let eventCats = e.cat;
     for (let eventCat of eventCats.split(',')) {
 
-      if (shouldBreakdownByEventName) {
+      if (opts.aggregateBy) {
         eventCat = `${e.name} - ${eventCat}`;
       }
 
@@ -51,16 +55,11 @@ function sumItUp(shouldBreakdownByEventName = false) {
     tracePhs[e.ph]++;
   });
 
-  groupAndOutput(traceCats, totalBytes, totalEvents, tracePhs);
+  reportTotals(traceCats, totalBytes, totalEvents, tracePhs, opts);
 } 
 
 
-sumItUp(false);
-sumItUp(true);
-
-
-
-function groupAndOutput(traceCats, totalBytes, totalEvents, tracePhs) {
+function reportTotals(traceCats, totalBytes, totalEvents, tracePhs, opts) {
   // obj to array
   const traceTotals = [];
   Object.keys(traceCats).forEach(catname => {
@@ -69,7 +68,7 @@ function groupAndOutput(traceCats, totalBytes, totalEvents, tracePhs) {
   });
 
   // sort and log
-  console.log('\n');
+  console.log('');
   console.log('Bytes'.padStart(16), '\t', 'Count'.padStart(7), '\t', 'Event Name'.padStart(18))
   
   let skipped = {bytes: 0, events: 0};
@@ -103,7 +102,10 @@ function groupAndOutput(traceCats, totalBytes, totalEvents, tracePhs) {
     '[(Rows that were < 1% of bytes)]'
   );
 
-  console.log('\n Phases:')
-  Object.entries(tracePhs).sort((a, b) => b[1] - a[1]).forEach(([ph, count]) => console.log(`ph(${ph}): ${count.toLocaleString()}`) );
-  // console.log({tracePhs});
+  // phase counts
+  // if (!opts.aggregateBy) {
+  //   console.log('\n Phases:')
+  //   Object.entries(tracePhs).sort((a, b) => b[1] - a[1]).forEach(([ph, count]) => console.log(`ph(${ph}): ${count.toLocaleString()}`) );
+  //   // console.log({tracePhs});    
+  // }
 }
