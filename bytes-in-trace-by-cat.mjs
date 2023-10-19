@@ -36,20 +36,21 @@ function iterateTrace(opts = {aggregateBy: false}) {
   
   trace.traceEvents.forEach(e => {
     let eventCats = e.cat;
-    for (let eventCat of eventCats.split(',')) {
+    const splittedCats = opts.aggregateBy ? [eventCats] : eventCats.split(',');
+    for (let eventId of splittedCats) {
 
       if (opts.aggregateBy) {
-        eventCat = `${e.name} - ${eventCat}`;
+        eventId = `${e.name.padEnd(35)} (${eventId})`;
       }
 
-      // if (e.name === 'ThreadControllerImpl::RunTask') eventCat += '::::::::RunTask';
-      const cat = traceCats[eventCat] || {bytes: 0, events: 0};
+      // if (e.name === 'ThreadControllerImpl::RunTask') eventId += '::::::::RunTask';
+      const cat = traceCats[eventId] || {bytes: 0, count: 0};
       const bytes = JSON.stringify(e).length;
       cat.bytes += bytes;
       totalBytes += bytes;
-      cat.events += 1;
+      cat.count += 1;
       totalEvents += 1;
-      traceCats[eventCat] = cat;
+      traceCats[eventId] = cat;
     }
     tracePhs[e.ph] = tracePhs[e.ph] || 0;
     tracePhs[e.ph]++;
@@ -62,21 +63,21 @@ function iterateTrace(opts = {aggregateBy: false}) {
 function reportTotals(traceCats, totalBytes, totalEvents, tracePhs, opts) {
   // obj to array
   const traceTotals = [];
-  Object.keys(traceCats).forEach(catname => {
-    const cat = traceCats[catname];
-    traceTotals.push({name: catname, bytes: cat.bytes, events: cat.events});
+  Object.keys(traceCats).forEach(eventId => {
+    const {bytes, count} = traceCats[eventId];
+    traceTotals.push({name: eventId, bytes, count});
   });
 
   // sort and log
   console.log('');
-  console.log('Bytes'.padStart(16), '\t', 'Count'.padStart(7), '\t', 'Event Name'.padStart(18))
+  console.log('Bytes'.padStart(16), '\t', 'Count'.padStart(16).padEnd(18), '\t', (opts.aggregateBy ? ('Event Name'.padEnd(35) + ' (cat)') : 'Category'))
   
-  let skipped = {bytes: 0, events: 0};
-  traceTotals.sort((a, b) => b.bytes - a.bytes).forEach((tot, i) => {
+  let skipped = {bytes: 0, count: 0};
+  traceTotals.sort((a, b) => b.bytes - a.bytes).forEach((tot, i) => {  // sort by bytes.. can change to sort by eventCount here instead.
     const bytesPct = tot.bytes * 100/ totalBytes;
     if (bytesPct < 1) {
       skipped.bytes += tot.bytes;
-      skipped.events += tot.events;
+      skipped.count += tot.count;
       return; // dont output.
     }
 
@@ -84,8 +85,8 @@ function reportTotals(traceCats, totalBytes, totalEvents, tracePhs, opts) {
       tot.bytes.toLocaleString().padStart(15), 
       `${(bytesPct).toLocaleString(undefined, {maximumFractionDigits: 1})}%`.padStart(6),
       '\t', 
-      tot.events.toLocaleString().padStart(9), 
-      `${(tot.events * 100/ totalEvents).toLocaleString(undefined, {maximumFractionDigits: 1})}%`.padStart(6),
+      tot.count.toLocaleString().padStart(9), 
+      `${(tot.count * 100/ totalEvents).toLocaleString(undefined, {maximumFractionDigits: 1})}%`.padStart(6),
       '\t', 
       tot.name
     );
@@ -96,8 +97,8 @@ function reportTotals(traceCats, totalBytes, totalEvents, tracePhs, opts) {
     skipped.bytes.toLocaleString().padStart(15), 
     `${( skipped.bytes * 100/ totalBytes).toLocaleString(undefined, {maximumFractionDigits: 1})}%`.padStart(6),
     '\t', 
-    skipped.events.toLocaleString().padStart(9), 
-    `${(skipped.events * 100/ totalEvents).toLocaleString(undefined, {maximumFractionDigits: 1})}%`.padStart(6),
+    skipped.count.toLocaleString().padStart(9), 
+    `${(skipped.count * 100/ totalEvents).toLocaleString(undefined, {maximumFractionDigits: 1})}%`.padStart(6),
     '\t', 
     '[(Rows that were < 1% of bytes)]'
   );
