@@ -4,7 +4,7 @@ import {strict as assert} from 'assert';
 import {saveTrace, loadTraceEventsFromFile} from './trace-file-utils.mjs';
 import {TraceProcessor} from '../lighthouse/core/lib/tracehouse/trace-processor.js';
 
-export async function resaveTrace(filename, removeEventFn) {
+export async function resaveTrace(filename, filterEventFn) {
   const traceEvents = loadTraceEventsFromFile(filename);
   const text = fs.readFileSync(filename, 'utf-8');
   const newlines = text.split('\n').length;
@@ -13,8 +13,8 @@ export async function resaveTrace(filename, removeEventFn) {
 
   const afterTraceEvents = TraceProcessor.filteredTraceSort(traceEvents, e => {
     // Remove events potentially
-    if (typeof removeEventFn === 'function') {
-      return !removeEventFn(e);
+    if (typeof filterEventFn === 'function') {
+      return filterEventFn(e);
     }
     return true;
   });
@@ -51,11 +51,16 @@ if (import.meta.url.endsWith(process?.argv[1])) {
 
 async function cli() {
   const filename = path.resolve(process.cwd(), process.argv[2]);
-  await resaveTrace(filename);
+  await resaveTrace(filename); // , filterEventFn);
 }
 
 
-
+// return true to keep. false to drop
+function filterEventFn(e) {
+  if (e.tid === 259) return true;
+  if (e.cat === '__metadata') return true;
+  return false;
+}
 
   //     // // strip these events out of the new one
   //     // if ([
