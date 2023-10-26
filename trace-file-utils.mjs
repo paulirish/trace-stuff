@@ -113,6 +113,9 @@ export function readJson(filePath) {
  * @returns TraceEvent[]
  */
 export function loadTraceEventsFromFile(filename) {
+  if (!fs.existsSync(filename)) {
+    throw new Error('File not found. ' + filename);
+  }
   const fileBuf = fs.readFileSync(filename);
   let data;
   if (isGzip(fileBuf)) {

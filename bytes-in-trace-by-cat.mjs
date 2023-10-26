@@ -35,6 +35,9 @@ function iterateTrace(opts = {aggregateBy: false}) {
   }
   
   trace.traceEvents.forEach(e => {
+
+    if (e.dur === undefined && e.ph !== 'I') { console.log({e})}
+
     let eventCats = e.cat;
     const splittedCats = opts.aggregateBy ? [eventCats] : eventCats.split(',');
     for (let eventId of splittedCats) {
