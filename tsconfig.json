@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "outDir": ".tmp/tsbuildinfo/",
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "declarationMap": true,
+
+    "target": "es2020",
+    "module": "es2020",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+
+    "allowJs": true,
+    "checkJs": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+
+
+    "lib": ["es2020"]
+
+    // "listFiles": true,
+    // "noErrorTruncation": true,
+    // "extendedDiagnostics": true,
+
+    // TODO(esmodules): included to support require('file.json'). Remove on the switch to ES Modules.
+    //   "resolveJsonModule": true,
+  },
+  "include": [
+    "types/*.d.ts",
+    "*.js",
+    // not third_party yet
+
+    // "node_modules/devtools-protocol/types/protocol.d.ts",
+
+    // TODO(esmodules): JSON files included via resolveJsonModule. Removable on the switch to ES Modules.
+    "package.json"
+  ]
+}
