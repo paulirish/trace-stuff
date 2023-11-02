@@ -3,6 +3,8 @@
 
 
 import fs from 'node:fs';
+import {loadTraceEventsFromFile} from './trace-file-utils.mjs';
+
 
 const passedArg = process.argv[2];
 const filename = passedArg ? passedArg : './scroll-tl-viewer.json';
@@ -12,8 +14,8 @@ const stat = fs.statSync(filename);
 console.log('size:' ,  ( stat.size / 1_000_000).toLocaleString(), 'MB');
 console.log('first by event name + category. then by category');
 
-let trace = JSON.parse(fs.readFileSync(filename, 'utf-8'));
-console.log('event count: ', trace.traceEvents.length.toLocaleString())
+let traceEvents = loadTraceEventsFromFile(filename);
+console.log('event count: ', traceEvents.length.toLocaleString())
 
 
 iterateTrace();
@@ -27,17 +29,8 @@ function iterateTrace(opts = {aggregateBy: false}) {
   let totalBytes = 0;
   let totalEvents = 0;
 
-  if (trace.length) {
-    const traceEvents = trace;
-    trace = {
-      traceEvents,
-    };
-  }
   
-  trace.traceEvents.forEach(e => {
-
-    if (e.dur === undefined && e.ph !== 'I') { console.log({e})}
-
+  traceEvents.forEach(e => {
     let eventCats = e.cat;
     const splittedCats = opts.aggregateBy ? [eventCats] : eventCats.split(',');
     for (let eventId of splittedCats) {
