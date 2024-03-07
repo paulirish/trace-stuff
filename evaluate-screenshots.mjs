@@ -1,6 +1,7 @@
-/* eslint-disable */
-'use strict';
 
+/**
+ * Emit some summary numbers about the screenshots
+ */
 
 import fs from 'node:fs';
 

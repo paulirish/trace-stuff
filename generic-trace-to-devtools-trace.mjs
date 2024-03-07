@@ -1,3 +1,7 @@
+// Take a trace captured from chrome://tracing or perfetto (but converted to json)…
+// And convert it to a trace that DevTools can load as first-class. (not falling back to isGenericTrace handling)
+
+
 import {loadTraceEventsFromFile, saveTrace} from './trace-file-utils.mjs';
 
 const passedArg = process.argv[2];

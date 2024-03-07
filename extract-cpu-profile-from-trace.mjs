@@ -1,3 +1,5 @@
+// Extract .cpuprofile from a trace.
+//
 // run like:
 //     node extract-cpu-profile-from-trace.mjs ~/Downloads/Profile-20200214T165958.json
 // it'll create 1 or more .cpuprofiles next to the trace
@@ -20,6 +22,7 @@ assert.ok(Array.isArray(events) && events.length);
 // but not when it comes in a trace. This is weird yes.
 // CPUProfileDataModel.translateProfileTree() calculates these, according to nancyly@'s tech talk. sweet!
 
+// See also go/cpu-profiler-notes which has plenty more stuff like this.
 
 
 const metaEvts = events.filter(e => e.cat === '__metadata');
@@ -29,7 +32,7 @@ events = events.filter(e => e.cat.includes('v8.cpu_profiler'));
 
 
 console.log(events.length);
-// e.name of 'ProfileChunk' or 'Profile';
+// At this point e.name is either 'ProfileChunk' or 'Profile';
 // ProfileChunk events can be on a diff thread id than the header. but the header is canonical.
 const profileHeadEvts = events.filter(e => e.name === 'Profile');
 // What pid's do we have?
@@ -91,11 +94,10 @@ pidtids.forEach(async pidtid => {
 
     // for compat with vscode's viewer. 
     for (const node of profile.nodes) {
-        // TODO: RESTORE this 
         node.callFrame.url = node.callFrame.url || '';
-        // node.callFrame.url = '';
     }
-    // "crop" the cpu profile. TODO: probably dont want this....
+
+    // Uncomment to manually "crop" the cpu profile. (probably dont want this....)
     // profile.samples = profile.samples.slice(0, 50_000);
     // profile.timeDeltas = profile.timeDeltas.slice(0, 50_000);
 

@@ -1,3 +1,6 @@
+
+// Save a "properly formatted" version of the trace (with a new filename). Optionally write a filter predicate to remove excess stuff.
+
 import fs from 'node:fs';
 import path from 'node:path';
 import {strict as assert} from 'assert';
@@ -57,10 +60,11 @@ async function cli() {
 
 // return true to keep. false to drop
 function filterEventFn(e) {
-  if (e.tid === 259) return true;
-  if (e.cat === '__metadata') return true;
+  // if (e.tid === 259) return true;
+  // if (e.cat === '__metadata') return true;
   return false;
 }
+
 
   //     // // strip these events out of the new one
   //     // if ([

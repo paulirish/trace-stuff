@@ -1,13 +1,18 @@
-/* eslint-disable */
-'use strict';
 
+/**
+ * Emit data about what trace event names and categories take up byte size in the JSON
+ * 
+ * Usage:
+ * 
+ *     node bytes-in-trace-by-cat.mjs path/to/trace.json   (json.gz supported, too)
+ */
 
 import fs from 'node:fs';
 import {loadTraceEventsFromFile} from './trace-file-utils.mjs';
 
 
 const passedArg = process.argv[2];
-const filename = passedArg ? passedArg : './scroll-tl-viewer.json';
+const filename = passedArg ? passedArg : '/Users/paulirish/Downloads/traces/cdt-clicks-frameseq-on-evtlat.json';
 
 console.log('Parsing: ', filename);
 const stat = fs.statSync(filename);
@@ -32,6 +37,7 @@ function iterateTrace(opts = {aggregateBy: false}) {
   
   traceEvents.forEach(e => {
     let eventCats = e.cat;
+
     const splittedCats = opts.aggregateBy ? [eventCats] : eventCats.split(',');
     for (let eventId of splittedCats) {
 

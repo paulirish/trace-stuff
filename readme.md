@@ -1,33 +1,43 @@
+## various trace file utilities I've amassed over the years
 
-* extraction:
-   -  cpu profile from trace
+This repo is messy.
 
-* synthesis
-   - network req with timing details (from resource timing)
-   - cpuprofile (from js self profile)
-   - everything else in rumtrace
+🚧 No promises that these aren't broken. Hacking encouraged!
+
+### Some of what's here:
+
+* `bytes-in-trace-by-cat.mjs` - Emit data about what trace event names and categories take up byte size in the JSON
+* `generic-trace-to-devtools-trace.mjs` - Take a trace captured from chrome://tracing or perfetto (but converted to json)… And convert it to a trace that DevTools can load as first-class. (not falling back to isGenericTrace handling)
+* `resave-traces.mjs` - Save a "properly formatted" version of the trace (with a new filename). Optionally write a filter predicate to remove excess stuff.
+* `extract-cpu-profile-from-trace.mjs` - Extract .cpuprofile from a trace. It'll create 1 or more .cpuprofiles next to the trace
+* `process-traces.mjs` - iterate over all traces found in a folder, run them through a trace processor to see what breaks.
+* `trace-file-utils.mjs` - loading, saving utilities.. matching whats in NPP & LH.
 
 
+## Notes
 
-trace synth shit:
+### Trace synthesis 
 
+We have a BUNCH of code that synthesizes traces out of generic data so it can be viewed in `about:tracing` or DevTools. 
+
+Some of those implementations: 
 * https://github.com/paulirish/rum-trace/blob/main/src/trace/trace.js
 * https://github.com/GoogleChrome/lighthouse/blob/main/core/test/create-test-trace.js
 * https://github.com/GoogleChrome/lighthouse/blob/main/core/lib/lantern-trace-saver.js
 * https://github.com/GoogleChrome/lighthouse/blob/main/core/lib/timing-trace-saver.js
 * https://github.com/GoogleChrome/lighthouse/blob/c9584689210c4fff8398e7a124f0819a5d91a4e8/core/lib/tracehouse/cpu-profile-model.js#L116-L134
 * https://github.com/GoogleChrome/lighthouse/blob/98eebdaf6daa82957cadd057b16ce680af226bc3/lighthouse-core/lib/traces/pwmetrics-events.js#L137-L164
+* Some of the above are local here in `./third_party`
+* https://github.com/paulirish/rum-trace
+
 
 ## revision numbers for CDT frontend appspot
 
-? use net-export to find real appspot URLS.
-
-as of feb 2023, latest advice is in trace-cafe
+See [github.com/paulirish/trace.cafe/blob/9aee52…/src/app.js#L9-L19](https://github.com/paulirish/trace.cafe/blob/9aee52bd11b0f61e31d1278da0fe0006ec0019ce/src/app.js#L9-L19)
 
 
+## Types
 
-https://chrome-devtools-frontend.appspot.com/serve_rev/@3d5948960d62418160796d5831a4d2d7d6c90fa8/inspector.html?remoteVersion=107.0.5304.91&remoteFrontend=true
-and devtools_app.html .. worker_app. node... ndb.
-
-dont know about the other non-serve_rev endpoints tho
-
+* https://github.com/ChromeDevTools/devtools-frontend/blob/main/front_end/models/trace/types/TraceEvents.ts hard to beat
+* https://github.com/GoogleChrome/lighthouse/blob/7d80178c37a1b600ea8f092fc0b098029799a659/types/artifacts.d.ts#L945-L1048 loosey goosey (also local here in `./types/chromium-trace.d.ts`)
+* https://github.com/connorjclark/chrome-trace-events-tsc brute force approach.
