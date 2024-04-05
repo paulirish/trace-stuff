@@ -30,6 +30,7 @@ Some of those implementations:
 * Some of the above are local here in `./third_party`
 * https://github.com/paulirish/rum-trace
 
+[`how to make a sweet combo trace that's viewable in devtools.md`](https://gist.github.com/paulirish/792fdf4baaa4acc1b563d177e1ae569d) (2018, probably outdated)
 
 ## revision numbers for CDT frontend appspot
 

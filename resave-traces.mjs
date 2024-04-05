@@ -54,14 +54,16 @@ if (import.meta.url.endsWith(process?.argv[1])) {
 
 async function cli() {
   const filename = path.resolve(process.cwd(), process.argv[2]);
-  await resaveTrace(filename); // , filterEventFn);
+  await resaveTrace(filename, filterEventFn);
 }
 
 
 // return true to keep. false to drop
 function filterEventFn(e) {
+  if (e.cat === '__metadata') return true;
+  if (e.ts < 460744042539) return true;
   // if (e.tid === 259) return true;
-  // if (e.cat === '__metadata') return true;
+
   return false;
 }
 

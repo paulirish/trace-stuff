@@ -3,6 +3,7 @@
 import stream from 'stream';
 import fs from 'fs';
 import zlib from 'zlib';
+import {strict as assert} from 'assert';
 
 /**
  * Generates a JSON representation of an array of objects with the objects
@@ -125,7 +126,8 @@ export function loadTraceEventsFromFile(filename) {
   }
   const json = JSON.parse(data);
   const traceEvents = json.traceEvents ?? json;
-  console.assert(Array.isArray(traceEvents) && traceEvents.length);
+  assert.ok(Array.isArray(traceEvents) && traceEvents.length, 'No trace events array');
+  // TODO, also extract metadata
   return traceEvents;
 }
 
