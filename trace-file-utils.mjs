@@ -117,7 +117,7 @@ export function loadTraceEventsFromFile(filename) {
   if (!fs.existsSync(filename)) {
     throw new Error('File not found. ' + filename);
   }
-  const fileBuf = fs.readFileSync(filename);
+  let fileBuf = fs.readFileSync(filename);
   let data;
   if (isGzip(fileBuf)) {
     data = zlib.gunzipSync(fileBuf);
@@ -125,6 +125,8 @@ export function loadTraceEventsFromFile(filename) {
     data = fileBuf.toString('utf8');
   }
   const json = JSON.parse(data);
+  // clear memory
+  fileBuf = data = '';
   const traceEvents = json.traceEvents ?? json;
   assert.ok(Array.isArray(traceEvents) && traceEvents.length, 'No trace events array');
   // TODO, also extract metadata

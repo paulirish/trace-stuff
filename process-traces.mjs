@@ -30,17 +30,16 @@ if (passedArg) {
       ...glob.sync(`${LH_ROOT}/core/test/fixtures/traces/**.json`), // catches a bunch of other non-trace json. eh.
       ...glob.sync(`${LH_ROOT}/core/test/fixtures/**/trace.json`),
       ...glob.sync(`${os.homedir()}/chromium-devtools/devtools-frontend/front_end/panels/timeline/fixtures/traces/*.gz`),
-      // ...glob.sync('/Users/paulirish/Downloads/*.json'),
-      // ...glob.sync('/Users/paulirish/Downloads/traces/**'),
-      // ...glob.sync('/Users/paulirish/code/lighthouse-extra-filesofmine/*.json'),
+      ...glob.sync(`${os.homedir()}/Downloads/traces/**.json`),
+      ...glob.sync(`${os.homedir()}/Downloads/traces/**.json.gz`),
     ].filter(filename => {
-      const blocklist = ['devtoolslog', 'devtools.log', 'network-records'];
+      const blocklist = ['devtoolslog', 'devtools.log', 'network-records', 'cpuprofile'];
       return !blocklist.some(blocklistItem => filename.includes(blocklistItem));
     })
   );
 }
 
-filenames = Array.from(new Set(filenames)); // uniq
+filenames = Array.from(new Set(filenames)).sort(); // uniq
 polyfillDOMRect();
 
 // console.log(filenames);
@@ -72,13 +71,12 @@ async function parseTraceText(filename) {
   console.log('Processing trace...');
   const logFailure = tag => e => console.error(` - ‼️ ${tag} FAILURE: `, e.message);
 
-  const proTrace = await processWithLighthouse(trace).catch(logFailure('LH processor'));
 
+  const proTrace = await processWithLighthouse(trace).catch(logFailure('LH processor'));
   proTrace && assertLighthouseData(proTrace).catch(logFailure('LH assertion'));
 
 
   const result = await processWithTraceEngine(trace).catch(logFailure('Trace engine parse'));
-
   result && assertEngineData(result.data).catch(logFailure('Trace engine assertion'));
   // also result.insights
 }
