@@ -3,8 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {strict as assert} from 'assert';
+import {strict as assert} from 'node:assert';
 import os from 'node:os';
+import test from 'node:test';
+
 import glob from 'glob';
 // Lighthouse
 import {LH_ROOT} from 'lighthouse/shared/root.js';
@@ -77,7 +79,7 @@ async function parseTraceText(filename) {
 
 
   const result = await processWithTraceEngine(trace).catch(logFailure('Trace engine parse'));
-  result && assertEngineData(result.data).catch(logFailure('Trace engine assertion'));
+  result && assertEngineData(result.data, filename).catch(logFailure('Trace engine assertion'));
   // also result.insights
 }
 
@@ -136,7 +138,9 @@ async function processWithTraceEngine(trace) {
     return {data, insights};
 }
 
-async function assertEngineData(data) {
+async function assertEngineData(data, filename) {
+  // return;
+  // test(`engine data looks good for ${filename}`, t => {
   // assertions extrcted from trace_engine/test-trace-engine.mjs
   assert.equal(data.Renderer.allTraceEntries.length > 1, true);
   // assert.equal(data.Screenshots.length > 2, true);
@@ -154,11 +158,11 @@ async function assertEngineData(data) {
     Array.from(data.Meta.topLevelRendererIds.values()).at(0),
     Array.from(data.Meta.frameByProcessId.keys()).at(0),
   ];
-  for (const datum of shouldBeNumbers) {
-    assert.equal(isNaN(datum), false);
-    assert.equal(typeof datum, 'number');
-    assert.equal(datum > 10, true);
-  }
+  shouldBeNumbers.forEach((datum, i) => {
+    assert.equal(isNaN(datum), false, `shouldBeNumbers[${i}] is NaN`);
+    assert.equal(typeof datum, 'number', `shouldBeNumbers[${i}] is not a number`);
+    assert.equal(datum > 10, true, `shouldBeNumbers[${i}] is not more than 10`);
+  });
   const shouldBeStrings = [
     data.Meta.mainFrameId,
     data.Meta.mainFrameURL,
@@ -167,10 +171,11 @@ async function assertEngineData(data) {
     data.Meta.mainFrameId,
   ];
 
-  for (const datum of shouldBeStrings) {
-    assert.equal(typeof datum, 'string');
-    assert.equal(datum.length > 10, true);
-  }
+  shouldBeStrings.forEach((datum, i) => {
+    assert.equal(typeof datum, 'string',`shouldBeStrings[${i}] isn't a string, but instead it's: ${typeof datum}`);
+    assert.equal(datum.length > 10, true, `shouldBeStrings[${i}] is not more than 10`);
+  });
+  // });
 }
 
 
