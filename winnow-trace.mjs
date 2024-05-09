@@ -1,22 +1,49 @@
-// Use a filter predicate to remove excess stuff. eg: stripping down to a timerange, only keeping metadata, just removing `disabled-by-default.v8.compile`
+// Use a filter predicate to remove excess stuff. eg: stripping down to a timerange, just removing `disabled-by-default.v8.compile`
 
 import path from 'node:path';
-import {strict as assert} from 'assert';
 import {saveTrace, loadTraceEventsFromFile} from './trace-file-utils.mjs';
 import {extractCPUProfileData} from './extract-cpu-profile-from-trace.mjs';
 
-// For Time crop, ADJUST THESE NUMBERS!  If not doing time crop. comment these lines out.
-const MIN_TS = 0;
+/**
+ * Usage:
+ * 
+ * For time crop, adjust the `MIN_TS` and `MAX_TS` numbers
+ * To avoid time-crop, comment out those 3 lines.
+ * 
+ * To exclude specific events, set them in `eventNamesToExclude`
+ * 
+ * To exclude everything except some specific event names.... do that yourself (haha) within `filterEventFn`
+ */ 
+
+const MIN_TS = 2401383928728;
 const MAX_TS = 2401384251864;
 const isTsWithinRange = (ts) => MIN_TS < ts && ts < MAX_TS;
 
+
+const eventNamesToExclude = []; // ['V8.ParseFunction', 'V8.CompileIgnition', 'V8.CompileIgnitionFinalization', 'v8.compile', 'V8.CompileCode']
+
+
 // return true to keep. false to drop
 function filterEventFn(e, cpuProfileData) {
-  // Almost certainly need these.
+  // Basics that need to be present regardless.
   if (e.name === 'TracingStartedInBrowser' || e.cat === '__metadata' || e.ts === 0) return true;
-  if (e.name === 'FrameCommittedInBrowser') return e.ts < MAX_TS;
+  if (typeof isTsWithinRange === 'function' && e.name === 'FrameCommittedInBrowser') return e.ts < MAX_TS;
+  
+  if (eventNamesToExclude.length && eventNamesToExclude.includes(e.name)) return false;
 
-  // We need to adjust samples and timeDeltas arrays.
+  if (typeof isTsWithinRange === 'function') {
+    adjustCPUProfilesForTimeCrop(e, cpuProfileData);
+    if (e.shouldRemove) return false;
+
+    return isTsWithinRange(e.ts);
+  }
+
+  return true; // Keep anything not false'd at this point.
+}  
+
+
+// We need to adjust samples and timeDeltas arrays.
+function adjustCPUProfilesForTimeCrop(e, cpuProfileData) {
   if (e.name === 'Profile') return true;
   if (e.name.startsWith('ProfileChunk')) {
     const index = cpuProfileData.findIndex(d => d.id === e.id && d.pid === e.pid); // tid doesnt match on profilechunks becaose weird reasons.
@@ -28,37 +55,29 @@ function filterEventFn(e, cpuProfileData) {
         const withinTimeRange = isTsWithinRange(currentTime);
         currentTime -= cpuProfileDatum.profile.timeDeltas[i];
         if (!withinTimeRange) {
-          // Delete those samples and timerange
+          // Delete that sample and timeDelta
           cpuProfileDatum.profile.samples.splice(i, 1);
           cpuProfileDatum.profile.timeDeltas.splice(i, 1);
         }
       }
-      // TODO do i need this?
-      // data.profile.endTime = data.profile.timeDeltas.reduce((x, y) => x + y, data.profile.startTime);
-      // This can trigger Maximum callstack exceeded in SamplesHandler due to a `.push(...samples)`
+      // Shouldn't make a diff but we'll recompute this end time, now that it's different.
+      cpuProfileDatum.profile.endTime = cpuProfileDatum.profile.timeDeltas.reduce((x, y) => x + y, cpuProfileDatum.profile.startTime);
+      // If samples array is > 125_507, this will trigger `Maximum callstack exceeded` in SamplesHandler due to a `.push(...samples)`
       e.args.data.cpuProfile = cpuProfileDatum.profile;
       e.args.data.timeDeltas = cpuProfileDatum.profile.timeDeltas;
       e.args.data.lines = cpuProfileDatum.profile.lines;
     } else {
-      // Remove because we already put all the data in an earlier one.
-      return false;
+      // Remove because we already put all the data in an earlier one. Also, Dumb hack but hey.
+      e.shouldRemove = true;
     }
   }
-
-  // Generic time crop
-  return isTsWithinRange(e.ts);
-  
-
-  // if (['V8.ParseFunction', 'V8.CompileIgnition', 'V8.CompileIgnitionFinalization', 'v8.compile', 'V8.CompileCode'].includes(e.name)) return false;
-
-  return true; // Keep anything not false'd at this point.
-}  
+}
 
 export async function resaveTrace(filename, filterEventFn) {
   const traceEvents = loadTraceEventsFromFile(filename);
   console.log('Refomatting', traceEvents.length, 'events');
 
-  const cpuProfileData = isTsWithinRange ? await Promise.all(extractCPUProfileData(traceEvents)) : [];
+  const cpuProfileData = typeof isTsWithinRange === 'function' ? await Promise.all(extractCPUProfileData(traceEvents)) : [];
   const afterTraceEvents = filteredTraceSort(traceEvents, e => filterEventFn(e, cpuProfileData));
 
   const afterFilename = `${filename}.winnowed.json`;
