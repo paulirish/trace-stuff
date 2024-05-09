@@ -44,10 +44,8 @@ export function extractCPUProfileData(events) {
         console.log(`Looking at: "pid":${pid},"tid":${tid},  …  ${threadName}`);
 
         const profileHeadEvt = profileHeadEvts.find(e => e.pid === pid && e.tid === tid);
-
-        // flow event connection. id's like 0x2
-        // OKAY this is apparently wrong. but i dont know how these are connected. so weird.
-        const chunkEvts = events.filter(e => e.name === 'ProfileChunk' && e.id === profileHeadEvt.id); 
+        // id's like 0x2. Match on id and also pid.
+        const chunkEvts = events.filter(e => e.name === 'ProfileChunk' && e.id === profileHeadEvt.id && e.pid && profileHeadEvt.pid); 
 
         if (!profileHeadEvt) {
             return console.error('missing profile header evt.... probably resolvable but not now');
@@ -66,6 +64,8 @@ export function extractCPUProfileData(events) {
             ...profileHeadEvt.args.data
         };
 
+        // CPU profile generator makes chunks every 100 samples.. which seems really low IMO. 
+        //     https://source.chromium.org/chromium/chromium/src/+/main:v8/src/profiler/profile-generator.cc;l=650-654;drc=4106e2406bd1b7219657a730bc389eb3a4629daa
         chunkEvts.forEach(chunk => {
             const chunkData = chunk.args.data.cpuProfile;
             profile.nodes.push(... chunkData.nodes || []);
