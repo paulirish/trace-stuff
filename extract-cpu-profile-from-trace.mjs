@@ -21,7 +21,7 @@ import {saveCpuProfile, loadTraceEventsFromFile} from './trace-file-utils.mjs';
 // See also go/cpu-profiler-notes which has plenty more stuff like this.
 
 
-export function extractCPUProfiles(events) {
+export function extractCPUProfileData(events) {
 
     // Cat = `disabled-by-default-v8.cpu_profiler`
     const metaEvts = events.filter(e => e.cat === '__metadata');
@@ -93,6 +93,8 @@ export function extractCPUProfiles(events) {
         return {
             pid,
             tid,
+            id: profileHeadEvt.id,
+            headTs: profileHeadEvt.ts,
             profile,
             threadName,
         }
@@ -110,9 +112,9 @@ async function cli() {
   const filename = path.resolve(process.cwd(), process.argv[2]);
 
   const traceEvents = loadTraceEventsFromFile(filename);
-  const profileData = await Promise.all(extractCPUProfiles(traceEvents));
+  const cpuProfileData = await Promise.all(extractCPUProfileData(traceEvents));
 
-  profileData.forEach(async ({pid, tid, profile, threadName}) => {
+  cpuProfileData.forEach(async ({pid, tid, profile, threadName}) => {
     // Uncomment to manually "crop" the cpu profile. (probably dont want this....)
     // profile.samples = profile.samples.slice(0, 50_000);
     // profile.timeDeltas = profile.timeDeltas.slice(0, 50_000);
