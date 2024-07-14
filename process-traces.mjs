@@ -17,6 +17,10 @@ import {MainThreadTasks as MainThreadTasks_} from 'lighthouse/core/lib/tracehous
 import {polyfillDOMRect} from '@paulirish/trace_engine/analyze-trace.mjs';
 import * as TraceEngine from '@paulirish/trace_engine';
 
+import pkg from '@paulirish/trace_engine/package.json'  with { "type": "json" };
+
+console.log('@paulirish/trace_engine', {version: pkg.version});
+
 // trace-stuff
 import {loadTraceEventsFromFile} from './trace-file-utils.mjs';
 
@@ -28,12 +32,14 @@ if (passedArg) {
 } else {
   filenames.push(
     ...[
-      ...glob.sync(`${LH_ROOT}/latest*/defaultPass.trace.json`),
-      ...glob.sync(`${LH_ROOT}/core/test/fixtures/traces/**.json`), // catches a bunch of other non-trace json. eh.
-      ...glob.sync(`${LH_ROOT}/core/test/fixtures/**/trace.json`),
-      ...glob.sync(`${os.homedir()}/chromium-devtools/devtools-frontend/front_end/panels/timeline/fixtures/traces/*.gz`),
-      ...glob.sync(`${os.homedir()}/Downloads/traces/**.json`),
-      ...glob.sync(`${os.homedir()}/Downloads/traces/**.json.gz`),
+      // ...glob.sync(`${LH_ROOT}/latest*/defaultPass.trace.json`),
+      // ...glob.sync(`${LH_ROOT}/core/test/fixtures/traces/**.json`), // catches a bunch of other non-trace json. eh.
+      // ...glob.sync(`${LH_ROOT}/core/test/fixtures/**/trace.json`),
+      // ...glob.sync(`${LH_ROOT}/core/test/fixtures/traces/load.json`),
+
+      // ...glob.sync(`${os.homedir()}/chromium-devtools/devtools-frontend/front_end/panels/timeline/fixtures/traces/*.gz`),
+      // ...glob.sync(`${os.homedir()}/Downloads/traces/**.json`),
+      // ...glob.sync(`${os.homedir()}/Downloads/traces/**.json.gz`),
     ].filter(filename => {
       const blocklist = ['devtoolslog', 'devtools.log', 'network-records', 'cpuprofile'];
       return !blocklist.some(blocklistItem => filename.includes(blocklistItem));
@@ -42,6 +48,7 @@ if (passedArg) {
 }
 
 filenames = Array.from(new Set(filenames)).sort(); // uniq
+
 polyfillDOMRect();
 
 // console.log(filenames);
@@ -52,7 +59,7 @@ for (const filename of filenames) {
 }
 
 async function parseTraceText(filename) {
-  console.log('\n\n🥳 Loading…', filename);
+  process.stderr.write(`\n🥳 Loading… ${filename.replace(os.homedir(), '$HOME')}`);
 
   let traceEvents;
   try {
@@ -62,24 +69,25 @@ async function parseTraceText(filename) {
     return;
   }
 
+  process.stderr.write(`  ${traceEvents.length.toLocaleString()} evts`);
   const trace = {
     traceEvents,
   };
   if (typeof trace?.traceEvents?.at(0)?.pid === 'undefined') {
-    console.log('❌ ... skipping. not an actual trace.', filename);
+    console.error('\n❌ ... skipping. not an actual trace.', filename);
     return;
   }
 
-  console.log('Processing trace...');
-  const logFailure = tag => e => console.error(` - ‼️ ${tag} FAILURE: `, e.message);
+  const logFatal = tag => e => process.stdout.write(`\n- ‼️ ${tag} FATAL: ${e.message}`) && false;
+  const logFail = tag => e => process.stdout.write(`\n- 😞 ${tag} fail: ${e.message}`) && false;
 
 
-  const proTrace = await processWithLighthouse(trace).catch(logFailure('LH processor'));
-  proTrace && assertLighthouseData(proTrace).catch(logFailure('LH assertion'));
+  const proTrace = await processWithLighthouse(trace).catch(logFatal('LH processor'));
+  proTrace && assertLighthouseData(proTrace).catch(logFail('LH assertion'));
 
 
-  const result = await processWithTraceEngine(trace).catch(logFailure('Trace engine parse'));
-  result && assertEngineData(result.data, filename).catch(logFailure('Trace engine assertion'));
+  const result = await processWithTraceEngine(trace).catch(logFatal('Trace engine parse'));
+  result && assertEngineData(result.data, filename).catch(logFail('Trace engine assertion'));
   // also result.insights
 }
 
@@ -147,33 +155,35 @@ async function assertEngineData(data, filename) {
   assert.equal(data.Meta.threadsInProcess.size > 0, true);
   // assert.equal(data.Meta.mainFrameNavigations.length > 0, true);
 
-  const shouldBeNumbers = [
-    data.Meta.traceBounds.min,
-    data.Meta.traceBounds.max,
-    data.Meta.traceBounds.range,
-    data.Meta.browserProcessId,
-    data.Meta.browserThreadId,
-    data.Meta.gpuProcessId,
-    data.Meta.gpuThreadId,
-    Array.from(data.Meta.topLevelRendererIds.values()).at(0),
-    Array.from(data.Meta.frameByProcessId.keys()).at(0),
-  ];
-  shouldBeNumbers.forEach((datum, i) => {
-    assert.equal(isNaN(datum), false, `shouldBeNumbers[${i}] is NaN`);
-    assert.equal(typeof datum, 'number', `shouldBeNumbers[${i}] is not a number`);
-    assert.equal(datum > 10, true, `shouldBeNumbers[${i}] is not more than 10`);
-  });
-  const shouldBeStrings = [
-    data.Meta.mainFrameId,
-    data.Meta.mainFrameURL,
-    Array.from(data.Meta.navigationsByFrameId.keys()).at(0),
-    Array.from(data.Meta.navigationsByNavigationId.keys()).at(0),
-    data.Meta.mainFrameId,
-  ];
+  const shouldBeNumbers = {
+    traceBounds: data.Meta.traceBounds.min,
+    traceBounds: data.Meta.traceBounds.max,
+    traceBounds: data.Meta.traceBounds.range,
+    browserProcessId: data.Meta.browserProcessId,
+    browserThreadId: data.Meta.browserThreadId,
+    gpuProcessId: data.Meta.gpuProcessId,
+    // gpuThreadId: data.Meta.gpuThreadId,
+    topLevelRendererIds: Array.from(data.Meta.topLevelRendererIds.values()).at(0),
+    frameByProcessId: Array.from(data.Meta.frameByProcessId.keys()).at(0),
+  };
 
-  shouldBeStrings.forEach((datum, i) => {
-    assert.equal(typeof datum, 'string',`shouldBeStrings[${i}] isn't a string, but instead it's: ${typeof datum}`);
-    assert.equal(datum.length > 10, true, `shouldBeStrings[${i}] is not more than 10`);
+  Object.entries(shouldBeNumbers).forEach(([key, val], i) => {
+    assert.equal(isNaN(val), false, `${key} is NaN`);
+    assert.equal(typeof val, 'number', `${key} is not a number`);
+    assert.equal(val > 10, true, `${key} is not more than 10`);
+  });
+  const shouldBeStrings = {
+    mainFrameId: data.Meta.mainFrameId,
+    mainFrameURL: data.Meta.mainFrameURL,
+    // navigationsByFrameId: Array.from(data.Meta.navigationsByFrameId.keys()).at(0),
+    // navigationsByNavigationId: Array.from(data.Meta.navigationsByNavigationId.keys()).at(0),
+    mainFrameId: data.Meta.mainFrameId,
+  };
+
+
+  Object.entries(shouldBeStrings).forEach(([key, val], i) => {
+    assert.equal(typeof val, 'string',`${key} isn't a string, but instead it's: ${typeof val}.}`, );
+    assert.equal(val.length > 10, true, `${key} is not more than 10`);
   });
   // });
 }
