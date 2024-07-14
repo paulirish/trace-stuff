@@ -33,9 +33,9 @@ if (passedArg) {
   filenames.push(
     ...[
       // ...glob.sync(`${LH_ROOT}/latest*/defaultPass.trace.json`),
-      // ...glob.sync(`${LH_ROOT}/core/test/fixtures/traces/**.json`), // catches a bunch of other non-trace json. eh.
-      // ...glob.sync(`${LH_ROOT}/core/test/fixtures/**/trace.json`),
-      // ...glob.sync(`${LH_ROOT}/core/test/fixtures/traces/load.json`),
+      ...glob.sync(`${LH_ROOT}/core/test/fixtures/traces/**.json`), // catches a bunch of other non-trace json. eh.
+      ...glob.sync(`${LH_ROOT}/core/test/fixtures/**/trace.json`),
+      ...glob.sync(`${LH_ROOT}/core/test/fixtures/traces/load.json`),
 
       // ...glob.sync(`${os.homedir()}/chromium-devtools/devtools-frontend/front_end/panels/timeline/fixtures/traces/*.gz`),
       // ...glob.sync(`${os.homedir()}/Downloads/traces/**.json`),
@@ -51,12 +51,13 @@ filenames = Array.from(new Set(filenames)).sort(); // uniq
 
 polyfillDOMRect();
 
-// console.log(filenames);
-// process.exit(0);
+const allFailures = new Map();
 
 for (const filename of filenames) {
   await parseTraceText(filename);
 }
+
+console.log('\n\nFatal parsing errors, grouped:\n', allFailures);
 
 async function parseTraceText(filename) {
   process.stderr.write(`\n🥳 Loading… ${filename.replace(os.homedir(), '$HOME')}`);
@@ -78,12 +79,19 @@ async function parseTraceText(filename) {
     return;
   }
 
-  const logFatal = tag => e => process.stdout.write(`\n- ‼️ ${tag} FATAL: ${e.message}`) && false;
+
+  const logFatal = tag => e => { 
+    process.stdout.write(`\n- ‼️ ${tag} FATAL: ${e.message}`) && false;
+    const signature = e.stack.split('\n').slice(0,2).join(' | ')
+    const failuresPerMessage = allFailures.get(signature) ?? [];
+    failuresPerMessage.push(filename);
+    allFailures.set(signature, failuresPerMessage);
+  };
   const logFail = tag => e => process.stdout.write(`\n- 😞 ${tag} fail: ${e.message}`) && false;
 
 
-  const proTrace = await processWithLighthouse(trace).catch(logFatal('LH processor'));
-  proTrace && assertLighthouseData(proTrace).catch(logFail('LH assertion'));
+  // const proTrace = await processWithLighthouse(trace).catch(logFatal('LH processor'));
+  // proTrace && assertLighthouseData(proTrace).catch(logFail('LH assertion'));
 
 
   const result = await processWithTraceEngine(trace).catch(logFatal('Trace engine parse'));
