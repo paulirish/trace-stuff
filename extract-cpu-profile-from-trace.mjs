@@ -90,6 +90,8 @@ export function extractCPUProfileData(events) {
             node.callFrame.url = node.callFrame.url || '';
         }
 
+        convertParentIntoChildrenIfNeeded(profile);
+
         return {
             pid,
             tid,
@@ -101,6 +103,45 @@ export function extractCPUProfileData(events) {
     });
 }
 
+
+// thanks! https://github.com/lahmatiy/cpupro/blob/be452cf876c6daf4ed665fac2f29a5aa37ee7466/app/prepare/formats/cpuprofile.ts#L56C1-L92C2
+
+// nodes may missing children field but have parent field, rebuild children arrays then;
+// avoid updating children when nodes have parent and children fields
+export function convertParentIntoChildrenIfNeeded(data) {
+    const nodes = data.nodes;
+
+    // no action when just one node or both first nodes has no parent (since only root node can has no parent)
+    if (nodes.length < 2 || (typeof nodes[0].parent !== 'number' && typeof nodes[1].parent !== 'number')) {
+        return;
+    }
+
+    // build map for nodes with no children only
+    const nodeWithNoChildrenById = new Map();
+
+    for (const node of data.nodes) {
+        if (!Array.isArray(node.children) || node.children.length === 0) {
+            nodeWithNoChildrenById.set(node.id, node);
+        }
+    }
+
+    // rebuild children for nodes which missed it
+    if (nodeWithNoChildrenById.size > 0) {
+        for (const node of nodes) {
+            if (typeof node.parent === 'number') {
+                const parent = nodeWithNoChildrenById.get(node.parent);
+
+                if (parent !== undefined) {
+                    if (Array.isArray(parent.children)) {
+                        parent.children.push(node.id);
+                    } else {
+                        parent.children = [node.id];
+                    }
+                }
+            }
+        }
+    }
+}
 
 
 // CLI direct invocation?
