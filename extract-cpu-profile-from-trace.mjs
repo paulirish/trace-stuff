@@ -45,7 +45,7 @@ export function extractCPUProfileData(events) {
 
         const profileHeadEvt = profileHeadEvts.find(e => e.pid === pid && e.tid === tid);
         // id's like 0x2. Match on id and also pid.
-        const chunkEvts = events.filter(e => e.name === 'ProfileChunk' && e.id === profileHeadEvt.id && e.pid && profileHeadEvt.pid); 
+        const chunkEvts = events.filter(e => e.name === 'ProfileChunk' && e.id === profileHeadEvt.id && e.pid === profileHeadEvt.pid); 
 
         if (!profileHeadEvt) {
             return console.error('missing profile header evt.... probably resolvable but not now');
