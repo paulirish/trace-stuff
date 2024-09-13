@@ -1,5 +1,9 @@
 // Extract netlog from a trace.
 //
+// In perfetto, "convert to json"
+// Run:
+//     node ./extract-netlog-from-trace.mjs ~/Downloads/Trace.json          
+// If there are errors about file too big, sorry. You can try removing all non-netlog trace events from trace.
 
 import path from 'node:path';
 import {loadTraceEventsFromFile, saveNetlog} from './trace-file-utils.mjs';
