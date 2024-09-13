@@ -28,6 +28,7 @@
   "include": [
     "types/*.d.ts",
     "*.js",
+    "*.mjs",
     // not third_party yet
 
     // "node_modules/devtools-protocol/types/protocol.d.ts",

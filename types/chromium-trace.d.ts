@@ -30,6 +30,7 @@ export interface TraceEvent {
       startLine?: number;
       url?: string;
     };
+    source_type?: string;
     data?: {
       frame?: string;
       isLoadingMainFrame?: boolean;
