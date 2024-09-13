@@ -24,6 +24,8 @@ console.log('@paulirish/trace_engine', {version: pkg.version});
 // trace-stuff
 import {loadTraceEventsFromFile} from './trace-file-utils.mjs';
 
+// (async function main() {
+
 const passedArg = process.argv[2]?.trim();
 let filenames = [];
 
@@ -33,12 +35,13 @@ if (passedArg) {
   filenames.push(
     ...[
       // ...glob.sync(`${LH_ROOT}/latest*/defaultPass.trace.json`),
-      ...glob.sync(`${LH_ROOT}/core/test/fixtures/traces/**.json`), // catches a bunch of other non-trace json. eh.
-      ...glob.sync(`${LH_ROOT}/core/test/fixtures/**/trace.json`),
-      ...glob.sync(`${LH_ROOT}/core/test/fixtures/traces/load.json`),
+      // ...glob.sync(`${LH_ROOT}/core/test/fixtures/traces/**.json`), // catches a bunch of other non-trace json. eh.
+      // ...glob.sync(`${LH_ROOT}/core/test/fixtures/**/trace.json`),
+      // ...glob.sync(`${LH_ROOT}/core/test/fixtures/traces/load.json`),
 
       // ...glob.sync(`${os.homedir()}/chromium-devtools/devtools-frontend/front_end/panels/timeline/fixtures/traces/*.gz`),
       // ...glob.sync(`${os.homedir()}/Downloads/traces/**.json`),
+      ...glob.sync(`${os.homedir()}/Downloads/traces/tracecafe-stored-traces/traces/*`),
       // ...glob.sync(`${os.homedir()}/Downloads/traces/**.json.gz`),
     ].filter(filename => {
       const blocklist = ['devtoolslog', 'devtools.log', 'network-records', 'cpuprofile'];
@@ -47,17 +50,25 @@ if (passedArg) {
   );
 }
 
-filenames = Array.from(new Set(filenames)).sort(); // uniq
+filenames = Array.from(new Set(filenames)).sort()// .slice(0, 50); // uniq
 
 polyfillDOMRect();
 
 const allFailures = new Map();
+
+process.on('SIGINT', () => {
+  console.log('\n\nFatal parsing errors, grouped:\n', allFailures);
+  process.exit(0); // Exit code 0 indicates success
+});
+
 
 for (const filename of filenames) {
   await parseTraceText(filename);
 }
 
 console.log('\n\nFatal parsing errors, grouped:\n', allFailures);
+
+// })();
 
 async function parseTraceText(filename) {
   process.stderr.write(`\n🥳 Loading… ${filename.replace(os.homedir(), '$HOME')}`);
