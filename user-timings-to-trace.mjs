@@ -8,7 +8,6 @@
  */
 performance.mark('top');
 
-
 import fs from 'fs';
 import path from 'path';
 
@@ -20,14 +19,11 @@ performance.mark('importdone');
  * Generates a Chrome trace file from user timing measures
  *
  * Originally adapted from https://github.com/tdresser/performance-observer-tracing
- * 
+ *
  * @param {PerformanceEntryList} entries user timing entries
  * @param {number=} threadId Can be provided to separate a series of trace events into another thread, useful if timings do not share the same timeOrigin, but should both be "left-aligned".
  */
 export function generateTraceEvents(entries, threadId = 0) {
-  if (!Array.isArray(entries) || entries[0].entryType) return [];
-
-
   /** @type {TraceEvent[]} */
   const currentTrace = [];
   entries.sort((a, b) => a.startTime - b.startTime);
@@ -49,8 +45,8 @@ export function generateTraceEvents(entries, threadId = 0) {
 
     const endEvt = {
       ...startEvt,
-      ph: 'e', 
-      ts: startEvt.ts + (entry.duration * 1000),
+      ph: 'e',
+      ts: startEvt.ts + entry.duration * 1000,
     };
 
     currentTrace.push(startEvt);
@@ -73,16 +69,20 @@ export function generateTraceEvents(entries, threadId = 0) {
 
   // Only inject TracingStartedInBrowser once
   if (threadId === 0) {
-    currentTrace.push(Object.assign({}, metaEvtBase, {
-      'cat': 'disabled-by-default-devtools.timeline',
-      'name': 'TracingStartedInBrowser',
-      'ph': 'I',
-      'args': {'data': {
-        'frameTreeNodeId': 1,
-        'persistentIds': true,
-        'frames': [],
-      }},
-    }));
+    currentTrace.push(
+      Object.assign({}, metaEvtBase, {
+        cat: 'disabled-by-default-devtools.timeline',
+        name: 'TracingStartedInBrowser',
+        ph: 'I',
+        args: {
+          data: {
+            frameTreeNodeId: 1,
+            persistentIds: true,
+            frames: [],
+          },
+        },
+      })
+    );
   }
   return currentTrace;
 }
@@ -93,10 +93,11 @@ export function generateTraceEvents(entries, threadId = 0) {
  * @return {string}
  */
 export function createTraceString(entries) {
+  if (!Array.isArray(entries) || !entries[0].entryType) throw new Error('This doesnt look like measures/marks');
+
   performance.mark('genTrace-b');
   const traceEvents = generateTraceEvents(entries);
-  performance.measure('generateTraceEvents', {start: 'gen-Trace-b', end: performance.now()});
-
+  performance.measure('generateTraceEvents', {start: 'genTrace-b', end: performance.now()});
 
   performance.mark('stringify-b');
 
@@ -108,7 +109,6 @@ ${traceEvents.map(evt => JSON.stringify(evt)).join(',\n')}
 
   return jsonStr;
 }
-
 
 // CLI direct invocation?
 if (import.meta.url.endsWith(process.argv[1])) {
@@ -128,10 +128,15 @@ async function cli() {
   const traceFilePath = path.join(pathObj.dir, `${pathObj.name}.trace.json`);
   fs.writeFileSync(traceFilePath, jsonStr, 'utf8');
 
+  performance.mark('alldone');
+  performance.measure('imports', {start: 'top', end: 'importdone'});
+  performance.measure('all', {start: 'top', end: 'alldone'});
+  // if (process.env.TIMING)  {
+  fs.writeFileSync('./selftimings.json', JSON.stringify(performance.getEntries()), 'utf8');
+  // }
+
   console.log(`
   > Timing trace saved to: ${traceFilePath}
   > View in DevTools perf panel, Perfetto UI or https://trace.cafe
 `);
 }
-
-
