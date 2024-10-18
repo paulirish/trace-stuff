@@ -15,6 +15,12 @@ performance.mark('importdone');
 
 /** @typedef {import('./types/chromium-trace').TraceEvent} TraceEvent */
 
+/** @typedef {number&{_tag: 'MilliSeconds'}} MilliSeconds */
+/** @typedef {number&{_tag: 'MicroSeconds'}} MicroSeconds */
+
+/** @param {number} num */
+export const toMicrosec = num => /** @type MicroSeconds */ (num * 1000);
+
 /**
  * Generates a Chrome trace file from user timing measures
  *
@@ -23,22 +29,96 @@ performance.mark('importdone');
  * @param {PerformanceEntryList} entries user timing entries
  * @param {number=} threadId Can be provided to separate a series of trace events into another thread, useful if timings do not share the same timeOrigin, but should both be "left-aligned".
  */
-export function generateTraceEvents(entries, threadId = 0) {
+export function generateTraceEvents(entries, threadId = 8) {
   /** @type {TraceEvent[]} */
   const currentTrace = [];
+  const baseEvt = {
+    pid: 7,
+    tid: threadId,
+    args: {},
+    // Hack: Use one to avoid some mishandling in the devtools of valid trace events
+    // with a ts of 0. We should fix the bug there, but making this a microsecond off
+    // seems an okay tradeoff.
+    ts: /** @type MicroSeconds */ (1),
+    name: '',
+  };
+
+  const frameData = {
+    processId: baseEvt.pid,
+    frame: '_frameid_',
+    name: '_frame_name_',
+    url: 'https://www.UNSET_URL.com/',
+    navigationId: '_navid_',
+  };
+
+  function addBaselineTraceEvents() {
+    /** @type {TraceEvent} */
+    const metaEvtBase = {
+      ...baseEvt,
+      cat: '__metadata',
+      ph: 'M',
+    };
+
+    currentTrace.push({
+      ...metaEvtBase,
+      name: 'process_labels',
+      args: {labels: 'User Timing'},
+    });
+
+    currentTrace.push({
+      ...metaEvtBase,
+      name: 'thread_name',
+      args: {
+        name: 'CrRendererMain',
+      },
+    });
+
+    currentTrace.push({
+      ...metaEvtBase,
+      name: 'process_name',
+      args: {
+        name: 'Renderer',
+      },
+    });
+
+  threadId === 8 && currentTrace.push(({
+    ...metaEvtBase,
+    cat: 'disabled-by-default-devtools.timeline',
+    name: 'TracingStartedInBrowser',
+    ph: 'I',
+    // s: 't',
+    args: {
+      data: {
+        frameTreeNodeId: 1,
+        persistentIds: true,
+        frames: [frameData],
+      },
+    },
+  }));
+
+  threadId === 8 && currentTrace.push(({
+    ...metaEvtBase,
+    cat: 'disabled-by-default-devtools.timeline',
+    name: 'FrameCommittedInBrowser',
+    ph: 'I',
+    args: {
+      data: frameData,
+    },
+  }));
+  }
+  addBaselineTraceEvents();
+
   entries.sort((a, b) => a.startTime - b.startTime);
+  // TODO: handle mark.
   entries.forEach((entry, i) => {
     /** @type {TraceEvent} */
     const startEvt = {
+      ...baseEvt,
       // FYI Colons in user_timing names get special handling in about:tracing you may not want. https://github.com/catapult-project/catapult/blob/b026043a43f9ce3f37c1cd57269f92cb8bee756c/tracing/tracing/extras/importer/trace_event_importer.html#L1643-L1654
       // But no adjustments made here.
       name: entry.name,
       cat: 'blink.user_timing',
       ts: entry.startTime * 1000,
-      args: {},
-      dur: 0,
-      pid: 0,
-      tid: threadId,
       ph: 'b',
       id: '0x' + (i++).toString(16),
     };
@@ -53,37 +133,6 @@ export function generateTraceEvents(entries, threadId = 0) {
     currentTrace.push(endEvt);
   });
 
-  // Add labels
-  /** @type {TraceEvent} */
-  const metaEvtBase = {
-    pid: 0,
-    tid: threadId,
-    ts: 0,
-    dur: 0,
-    ph: 'M',
-    cat: '__metadata',
-    name: 'process_labels',
-    args: {labels: 'Default'},
-  };
-  currentTrace.push(Object.assign({}, metaEvtBase, {args: {labels: 'User Timing'}}));
-
-  // Only inject TracingStartedInBrowser once
-  if (threadId === 0) {
-    currentTrace.push(
-      Object.assign({}, metaEvtBase, {
-        cat: 'disabled-by-default-devtools.timeline',
-        name: 'TracingStartedInBrowser',
-        ph: 'I',
-        args: {
-          data: {
-            frameTreeNodeId: 1,
-            persistentIds: true,
-            frames: [],
-          },
-        },
-      })
-    );
-  }
   return currentTrace;
 }
 
