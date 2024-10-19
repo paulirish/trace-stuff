@@ -16,7 +16,7 @@
     "forceConsistentCasingInFileNames": true,
 
 
-    "lib": ["es2020"]
+    "lib": ["ESNext", "dom"]
 
     // "listFiles": true,
     // "noErrorTruncation": true,
