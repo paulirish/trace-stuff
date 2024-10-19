@@ -1,6 +1,10 @@
+//  Take some user timings (performance.measure/mark) and generate a trace for visualization.
+//  Perfect if you instrment in Node.js with performance mark()/measure(), or the NPM marky package.
+//  Run like:
+//     node user-timings-to-trace.mjs user-timings.json
+//
 // Most of this file is from Lighthouse: https://github.com/GoogleChrome/lighthouse/blob/0da3e1d85d1920e3e75e423e6f905ddf4bd8fd53/core/lib/timing-trace-saver.js
 // But I've adapted it to be solo and modernized it a tad. ~Paul. 2024-10
-
 /**
  * @license
  * Copyright 2018 Google LLC

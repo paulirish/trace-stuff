@@ -8,8 +8,10 @@ This repo is messy.
 
 * `bytes-in-trace-by-cat.mjs` - Emit data about what trace event names and categories take up byte size in the JSON
 * `format-trace.mjs` - Save a "properly formatted" version of the trace to a new file.
+* `user-timings-to-trace.mjs` - Take some user timings (performance.measure/mark) and generate a trace for visualization.
 * `winnow-trace.mjs` - Remove trace events to crop it to a timerange, exclude some category, etc. Save it to a new file.
 * `generic-trace-to-devtools-trace.mjs` - Take a trace captured from chrome://tracing or perfetto (but converted to json)… And convert it to a trace that DevTools can load as first-class. (not falling back to isGenericTrace handling)
+* `extract-netlog-from-trace.mjs` - Extract .netlog from a trace, to use in the [viewer](https://netlog-viewer.appspot.com/).
 * `extract-cpu-profile-from-trace.mjs` - Extract .cpuprofile from a trace. It'll create 1 or more .cpuprofiles next to the trace
 * `process-traces.mjs` - iterate over all traces found in a folder, run them through a trace processor to see what breaks.
 * `trace-file-utils.mjs` - loading, saving utilities.. matching whats in NPP & LH.
