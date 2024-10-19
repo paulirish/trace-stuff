@@ -49,7 +49,7 @@ export function generateTraceEvents(entries, threadId = 8) {
     processId: baseEvt.pid,
     frame: '_frameid_',
     name: '_frame_name_',
-    url: 'https://www.UNSET_URL.com/',
+    url: '',
     navigationId: '_navid_',
   };
 
@@ -135,16 +135,17 @@ export function generateTraceEvents(entries, threadId = 8) {
     currentTrace.push(endEvt);
   });
 
-  // DevTools likes having a real event to calculate trace bounds
+  // DevTools likes having a real event at the end to calculate trace bounds. 
+  // We'll give it a little breathing room for more enjoyable UI.
   const firstTs = (entries.at(0)?.startTime ?? 0) * 1000;
   const lastTs = currentTrace.at(-1)?.ts ?? currentTrace.reduce((acc, e) => (e.ts + (e.dur ?? 0) > acc ? e.ts + (e.dur ?? 0) : acc), 0);
-
+  const finalTs = 2.1 * lastTs - firstTs;
   const lastEvent = {
     ...baseEvt,
     name: 'RunTask',
     cat: 'disabled-by-default-devtools.timeline',
     ph: 'X',
-    ts: lastTs, // (lastTs - firstTs) * 1.1,
+    ts: finalTs,
     dur: 2,
   };
   currentTrace.push(lastEvent);
