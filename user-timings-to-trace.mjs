@@ -6,20 +6,11 @@
  * Copyright 2018 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-performance.mark('top');
 
 import fs from 'fs';
 import path from 'path';
 
-performance.mark('importdone');
-
 /** @typedef {import('./types/chromium-trace').TraceEvent} TraceEvent */
-
-/** @typedef {number&{_tag: 'MilliSeconds'}} MilliSeconds */
-/** @typedef {number&{_tag: 'MicroSeconds'}} MicroSeconds */
-
-/** @param {number} num */
-export const toMicrosec = num => /** @type MicroSeconds */ (num * 1000);
 
 /**
  * Generates a Chrome trace file from user timing measures
@@ -41,7 +32,7 @@ export function generateTraceEvents(entries, threadId = 8) {
     // Hack: Use one to avoid some mishandling in the devtools of valid trace events
     // with a ts of 0. We should fix the bug there, but making this a microsecond off
     // seems an okay tradeoff.
-    ts: /** @type MicroSeconds */ (1),
+    ts: 1,
     name: '',
   };
 
@@ -83,72 +74,88 @@ export function generateTraceEvents(entries, threadId = 8) {
       },
     });
 
-  threadId === 8 && currentTrace.push(({
-    ...metaEvtBase,
-    cat: 'disabled-by-default-devtools.timeline',
-    name: 'TracingStartedInBrowser',
-    ph: 'I',
-    // s: 't',
-    args: {
-      data: {
-        frameTreeNodeId: 1,
-        persistentIds: true,
-        frames: [frameData],
-      },
-    },
-  }));
+    threadId === 8 &&
+      currentTrace.push({
+        ...metaEvtBase,
+        cat: 'disabled-by-default-devtools.timeline',
+        name: 'TracingStartedInBrowser',
+        ph: 'I',
+        // s: 't',
+        args: {
+          data: {
+            frameTreeNodeId: 1,
+            persistentIds: true,
+            frames: [frameData],
+          },
+        },
+      });
 
-  threadId === 8 && currentTrace.push(({
-    ...metaEvtBase,
-    cat: 'disabled-by-default-devtools.timeline',
-    name: 'FrameCommittedInBrowser',
-    ph: 'I',
-    args: {
-      data: frameData,
-    },
-  }));
+    threadId === 8 &&
+      currentTrace.push({
+        ...metaEvtBase,
+        cat: 'disabled-by-default-devtools.timeline',
+        name: 'FrameCommittedInBrowser',
+        ph: 'I',
+        args: {
+          data: frameData,
+        },
+      });
   }
   addBaselineTraceEvents();
 
-  
-  // TODO: handle mark.
   entries.forEach((entry, i) => {
+    if (entry.entryType === 'mark') {
+      const markEvt = {
+        ...baseEvt,
+        name: entry.name,
+        cat: 'blink.user_timing',
+        ts: entry.startTime * 1000,
+        ph: 'I',
+      };
+      return currentTrace.push(markEvt);
+    }
+
     /** @type {TraceEvent} */
-    const startEvt = {
+    const measureBeginEvt = {
       ...baseEvt,
       // FYI Colons in user_timing names get special handling in about:tracing you may not want. https://github.com/catapult-project/catapult/blob/b026043a43f9ce3f37c1cd57269f92cb8bee756c/tracing/tracing/extras/importer/trace_event_importer.html#L1643-L1654
       // But no adjustments made here.
       name: entry.name,
       cat: 'blink.user_timing',
       ts: entry.startTime * 1000,
+      id2: {local: '0x' + (i + 1).toString(16)},
       ph: 'b',
-      id: '0x' + (i++).toString(16),
     };
 
-    const endEvt = {
-      ...startEvt,
+    const measureEndEvt = {
+      ...measureBeginEvt,
       ph: 'e',
-      ts: startEvt.ts + entry.duration * 1000,
+      ts: measureBeginEvt.ts + entry.duration * 1000,
     };
 
-    currentTrace.push(startEvt);
-    currentTrace.push(endEvt);
+    currentTrace.push(measureBeginEvt);
+    currentTrace.push(measureEndEvt);
   });
 
-  // DevTools likes having a real event at the end to calculate trace bounds. 
+  // DevTools likes to calculate trace bounds with 'real' events.
   // We'll give it a little breathing room for more enjoyable UI.
   const firstTs = (entries.at(0)?.startTime ?? 0) * 1000;
   const lastTs = currentTrace.at(-1)?.ts ?? currentTrace.reduce((acc, e) => (e.ts + (e.dur ?? 0) > acc ? e.ts + (e.dur ?? 0) : acc), 0);
   const finalTs = 2.1 * lastTs - firstTs;
-  const lastEvent = {
+  const zeroEvent = {
     ...baseEvt,
     name: 'RunTask',
     cat: 'disabled-by-default-devtools.timeline',
     ph: 'X',
-    ts: finalTs,
+    ts: firstTs * 0.9,
     dur: 2,
   };
-  currentTrace.push(lastEvent);
+  const finalEvent = {
+    ...zeroEvent,
+    ts: finalTs,
+  };
+  currentTrace.push(zeroEvent);
+  currentTrace.push(finalEvent);
 
   return currentTrace;
 }
@@ -159,20 +166,15 @@ export function generateTraceEvents(entries, threadId = 8) {
  * @return {string}
  */
 export function createTraceString(entries) {
-  if (!Array.isArray(entries) || !entries[0].entryType) throw new Error('This doesnt look like measures/marks');
+  if (!Array.isArray(entries) || !entries[0].entryType) {
+    throw new Error('This doesnt look like measures/marks');
+  }
 
-  performance.mark('genTrace-b');
   const traceEvents = generateTraceEvents(entries);
-  performance.measure('generateTraceEvents', {start: 'genTrace-b', end: performance.now()});
-
-  performance.mark('stringify-b');
 
   const jsonStr = `{"traceEvents":[
 ${traceEvents.map(evt => JSON.stringify(evt)).join(',\n')}
 ]}`;
-
-  performance.measure('stringify', {start: 'stringify-b', end: performance.now()});
-
   return jsonStr;
 }
 
@@ -180,32 +182,34 @@ ${traceEvents.map(evt => JSON.stringify(evt)).join(',\n')}
 if (import.meta.url.endsWith(process.argv[1])) {
   cli();
 }
-
 async function cli() {
   const filename = process.argv[2] && path.resolve(process.cwd(), process.argv[2]);
   if (!filename || !fs.existsSync(filename)) {
     throw new Error(`File not found: ${filename}`);
   }
 
+  const mark = performance.mark.bind(performance);
+  mark('1');
   const entries = JSON.parse(fs.readFileSync(filename, 'utf8'));
+  mark('2');
   const jsonStr = createTraceString(entries);
+  mark('3');
 
   const pathObj = path.parse(filename);
   const traceFilePath = path.join(pathObj.dir, `${pathObj.name}.trace.json`);
   fs.writeFileSync(traceFilePath, jsonStr, 'utf8');
+  mark('4');
 
-  performance.mark('alldone');
-  performance.measure('imports', {start: 'top', end: 'importdone'});
-  performance.measure('all', {start: 'top', end: 'alldone'});
-  // if (process.env.TIMING)  {
-  fs.writeFileSync('./selftimings.json', JSON.stringify(performance.getEntries()), 'utf8');
-  // }
-
+  if (process.env.TIMING) {
+    performance.measure('all', '1', '4');
+    performance.measure('read json', '1', '2');
+    performance.measure('craft trace', '2', '3');
+    performance.measure('write file', '3', '4');
+    fs.writeFileSync('./selftimings.json', JSON.stringify(performance.getEntries()), 'utf8');
+  }
+ 
   console.log(`
   > Timing trace saved to: ${traceFilePath}
-  > View in DevTools perf panel, Perfetto UI or https://trace.cafe
+  > View in DevTools perf panel, https://ui.perfetto.dev or https://trace.cafe
 `);
 }
-
-// problem is in getDrawableData, levelIndexes isn't populated right
-// this.timelineLevels[0] is emtpy
