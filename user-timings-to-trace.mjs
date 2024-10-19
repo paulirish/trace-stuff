@@ -30,6 +30,8 @@ export const toMicrosec = num => /** @type MicroSeconds */ (num * 1000);
  * @param {number=} threadId Can be provided to separate a series of trace events into another thread, useful if timings do not share the same timeOrigin, but should both be "left-aligned".
  */
 export function generateTraceEvents(entries, threadId = 8) {
+  entries.sort((a, b) => a.startTime - b.startTime);
+
   /** @type {TraceEvent[]} */
   const currentTrace = [];
   const baseEvt = {
@@ -108,7 +110,7 @@ export function generateTraceEvents(entries, threadId = 8) {
   }
   addBaselineTraceEvents();
 
-  entries.sort((a, b) => a.startTime - b.startTime);
+  
   // TODO: handle mark.
   entries.forEach((entry, i) => {
     /** @type {TraceEvent} */
@@ -132,6 +134,20 @@ export function generateTraceEvents(entries, threadId = 8) {
     currentTrace.push(startEvt);
     currentTrace.push(endEvt);
   });
+
+  // DevTools likes having a real event to calculate trace bounds
+  const firstTs = (entries.at(0)?.startTime ?? 0) * 1000;
+  const lastTs = currentTrace.at(-1)?.ts ?? currentTrace.reduce((acc, e) => (e.ts + (e.dur ?? 0) > acc ? e.ts + (e.dur ?? 0) : acc), 0);
+
+  const lastEvent = {
+    ...baseEvt,
+    name: 'RunTask',
+    cat: 'disabled-by-default-devtools.timeline',
+    ph: 'X',
+    ts: lastTs, // (lastTs - firstTs) * 1.1,
+    dur: 2,
+  };
+  currentTrace.push(lastEvent);
 
   return currentTrace;
 }
@@ -189,3 +205,6 @@ async function cli() {
   > View in DevTools perf panel, Perfetto UI or https://trace.cafe
 `);
 }
+
+// problem is in getDrawableData, levelIndexes isn't populated right
+// this.timelineLevels[0] is emtpy
