@@ -35,6 +35,15 @@ export function extractCPUProfileData(events) {
     const profileHeadEvts = events.filter(e => e.name === 'Profile');
     // What pid's do we have?
     const pidtids = profileHeadEvts.reduce((prev, curr) => prev.add(`p${curr.pid}t${curr.tid}`), new Set())
+    // TODO: use this appraoch instead
+    // const pidtids = profileHeadEvts.reduce((map_, evt) => {
+    //     if (!map_.has(evt.pid)) {
+    //         map_.set(evt.pid, new Set());
+    //     }
+    //     map_.get(evt.pid).add(evt.tid);
+    //     return map_;
+    // }, new Map());
+
 
     // See also `extractCpuProfile` in CDT's TimelineModel
     return Array.from(pidtids).map(async pidtid => {

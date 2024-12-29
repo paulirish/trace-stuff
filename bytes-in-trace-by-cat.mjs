@@ -72,8 +72,11 @@ function reportTotals(traceCats, totalBytes, totalEvents, tracePhs, opts) {
 
   // sort and log
   console.log('');
-  console.log('Bytes'.padStart(16), '\t', 'Count'.padStart(16).padEnd(18), '\t', (opts.aggregateBy ? ('Event Name'.padEnd(35) + ' (cat)') : 'Category'))
-  
+  console.log('Bytes'.padStart(16), '  ', 'Count'.padStart(14), '  ', (opts.aggregateBy ? ('Event Name'.padEnd(35) + ' (cat)') : 'Category'))
+
+  const kbfmt = Intl.NumberFormat("en", {  style: "unit", unit: "kilobyte", unitDisplay: "short",  minimumFractionDigits: 0, maximumFractionDigits: 0, minimumSignificantDigits: 1, maximumSignificantDigits: 3 });
+  const toKb = bytes => kbfmt.format(bytes/1024);
+
   let skipped = {bytes: 0, count: 0};
   traceTotals.sort((a, b) => b.bytes - a.bytes).forEach((tot, i) => {  // sort by bytes.. can change to sort by eventCount here instead.
     const bytesPct = tot.bytes * 100/ totalBytes;
@@ -84,24 +87,24 @@ function reportTotals(traceCats, totalBytes, totalEvents, tracePhs, opts) {
     }
 
     console.log(
-      tot.bytes.toLocaleString().padStart(15), 
-      `${(bytesPct).toLocaleString(undefined, {maximumFractionDigits: 1})}%`.padStart(6),
-      '\t', 
-      tot.count.toLocaleString().padStart(9), 
-      `${(tot.count * 100/ totalEvents).toLocaleString(undefined, {maximumFractionDigits: 1})}%`.padStart(6),
-      '\t', 
+      toKb(tot.bytes).padStart(9), 
+      `${(bytesPct).toLocaleString(undefined, {maximumFractionDigits: 1, minimumFractionDigits: 1})}%`.padStart(6),
+      '  ', 
+      tot.count.toLocaleString().padStart(7), 
+      `${(tot.count * 100/ totalEvents).toLocaleString(undefined, {maximumFractionDigits: 1, minimumFractionDigits: 1})}%`.padStart(6),
+      '  ', 
       tot.name
     );
   })
 
   // skipped
   console.log(
-    skipped.bytes.toLocaleString().padStart(15), 
-    `${( skipped.bytes * 100/ totalBytes).toLocaleString(undefined, {maximumFractionDigits: 1})}%`.padStart(6),
-    '\t', 
-    skipped.count.toLocaleString().padStart(9), 
-    `${(skipped.count * 100/ totalEvents).toLocaleString(undefined, {maximumFractionDigits: 1})}%`.padStart(6),
-    '\t', 
+    toKb(skipped.bytes).padStart(9), 
+    `${( skipped.bytes * 100/ totalBytes).toLocaleString(undefined, {maximumFractionDigits: 1, minimumFractionDigits: 1})}%`.padStart(6),
+    '  ', 
+    skipped.count.toLocaleString().padStart(7), 
+    `${(skipped.count * 100/ totalEvents).toLocaleString(undefined, {maximumFractionDigits: 1, minimumFractionDigits: 1})}%`.padStart(6),
+    '  ', 
     '[(Rows that were < 1% of bytes)]'
   );
 
