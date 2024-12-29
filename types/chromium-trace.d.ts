@@ -30,7 +30,10 @@ export interface TraceEvent {
       startLine?: number;
       url?: string;
     };
+    source_type?: string;
     data?: {
+      frameTreeNodeId?: number;
+      persistentIds?: boolean;
       frame?: string;
       isLoadingMainFrame?: boolean;
       documentLoaderURL?: string;

@@ -165,10 +165,10 @@ async function cli() {
     const cpuFilename = `${filename}-pid-${pid}-tid-${tid}-${threadName}.cpuprofile`;
 
 
-    // format it
+    // format it and save
     await saveCpuProfile(profile, cpuFilename);
+
     const readRes = fs.readFileSync(cpuFilename, 'utf-8');
-    // fs.writeFileSync(cpuFilename, JSON.stringify(profile));
     console.log(`written ${readRes.length.toLocaleString()} bytes to: ${cpuFilename}`);
   });
 

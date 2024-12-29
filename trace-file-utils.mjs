@@ -99,6 +99,27 @@ export function saveCpuProfile(profile, cpuProfileFilename) {
 
 
 /**
+ * @return {Promise<void>}
+ * @param {string} filename
+ */
+export async function saveNetlog(netlog, filename) {
+  const writeStream = fs.createWriteStream(filename);
+
+  const {events, constants, ...rest} = netlog;
+  if (Object.keys(rest).length) throw new Error('unexpected contents in netlog! : ' + JSON.stringify(rest).slice(0, 1000));
+
+  return stream.promises.pipeline(function* () {
+    yield '{\n';
+    yield `"constants": ${JSON.stringify(constants, null, 2)}`;
+    yield ',\n"events": ';
+    yield* arrayOfObjectsJsonGenerator(events);
+    yield '}\n';
+  }, writeStream);
+}
+
+
+
+/**
  * A simple version of LH's test-util's readJson. TBD if it needs more import.meta complexity.
  *
  * @deprecated use `loadTraceEventsFromFile` instead.
@@ -129,7 +150,8 @@ export function loadTraceEventsFromFile(filename) {
   fileBuf = data = '';
   const traceEvents = json.traceEvents ?? json;
   assert.ok(Array.isArray(traceEvents) && traceEvents.length, 'No trace events array');
-  // TODO, also extract metadata
+  // TODO, do something less gross.
+  traceEvents.metadata = json.metadata;
   return traceEvents;
 }
 

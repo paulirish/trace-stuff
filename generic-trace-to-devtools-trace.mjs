@@ -88,6 +88,7 @@ const busiestFrameId = busiestFrame?.at(0) ?? 'NOFRAMEIDFOUND';
  * @return {LH.TraceEvent}
  */
 function createFakeTracingStartedInPage() {
+  // TODO: migrate to TracingStartedInBrowser cuz this one is old.
   return {
     pid: busiestMainThread.pid,
     tid: busiestMainThread.tid,
