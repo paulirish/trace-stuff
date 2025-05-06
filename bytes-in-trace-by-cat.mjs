@@ -1,26 +1,25 @@
-
 /**
  * Emit data about what trace event names and categories take up byte size in the JSON
- * 
+ *
  * Usage:
- * 
+ *
  *     node bytes-in-trace-by-cat.mjs path/to/trace.json   (json.gz supported, too)
  */
 
 import fs from 'node:fs';
-import {loadTraceEventsFromFile} from './trace-file-utils.mjs';
 
+import {loadTraceEventsFromFile} from './trace-file-utils.mjs';
 
 const passedArg = process.argv[2];
 const filename = passedArg ? passedArg : '/Users/paulirish/Downloads/traces/cdt-clicks-frameseq-on-evtlat.json';
 
 console.log('Parsing: ', filename);
 const stat = fs.statSync(filename);
-console.log('size:' ,  ( stat.size / 1_000_000).toLocaleString(), 'MB');
+console.log('size:', ( stat.size / 1_000_000).toLocaleString(), 'MB');
 console.log('first by event name + category. then by category');
 
-let traceEvents = loadTraceEventsFromFile(filename);
-console.log('event count: ', traceEvents.length.toLocaleString())
+const traceEvents = loadTraceEventsFromFile(filename);
+console.log('event count: ', traceEvents.length.toLocaleString());
 
 
 iterateTrace();
@@ -34,13 +33,12 @@ function iterateTrace(opts = {aggregateBy: false}) {
   let totalBytes = 0;
   let totalEvents = 0;
 
-  
+
   traceEvents.forEach(e => {
-    let eventCats = e.cat;
+    const eventCats = e.cat;
 
     const splittedCats = opts.aggregateBy ? [eventCats] : eventCats.split(',');
     for (let eventId of splittedCats) {
-
       if (opts.aggregateBy) {
         eventId = `${e.name.padEnd(35)} (${eventId})`;
       }
@@ -59,7 +57,7 @@ function iterateTrace(opts = {aggregateBy: false}) {
   });
 
   reportTotals(traceCats, totalBytes, totalEvents, tracePhs, opts);
-} 
+}
 
 
 function reportTotals(traceCats, totalBytes, totalEvents, tracePhs, opts) {
@@ -72,14 +70,23 @@ function reportTotals(traceCats, totalBytes, totalEvents, tracePhs, opts) {
 
   // sort and log
   console.log('');
-  console.log('Bytes'.padStart(16), '  ', 'Count'.padStart(14), '  ', (opts.aggregateBy ? ('Event Name'.padEnd(35) + ' (cat)') : 'Category'))
+  console.log('Bytes'.padStart(16), '  ', 'Count'.padStart(14), '  ',
+    (opts.aggregateBy ? ('Event Name'.padEnd(35) + ' (cat)') : 'Category'));
 
-  const kbfmt = Intl.NumberFormat("en", {  style: "unit", unit: "kilobyte", unitDisplay: "short",  minimumFractionDigits: 0, maximumFractionDigits: 0, minimumSignificantDigits: 1, maximumSignificantDigits: 3 });
-  const toKb = bytes => kbfmt.format(bytes/1024);
+  const kbfmt = new Intl.NumberFormat('en', {
+    style: 'unit', unit: 'kilobyte', unitDisplay: 'short',
+    minimumFractionDigits: 0, maximumFractionDigits: 0,
+    minimumSignificantDigits: 1, maximumSignificantDigits: 3
+  });
+  const toKb = bytes => kbfmt.format(bytes / 1024);
 
-  let skipped = {bytes: 0, count: 0};
-  traceTotals.sort((a, b) => b.bytes - a.bytes).forEach((tot, i) => {  // sort by bytes.. can change to sort by eventCount here instead.
-    const bytesPct = tot.bytes * 100/ totalBytes;
+  const percentfmt = new Intl.NumberFormat('en', {
+    maximumFractionDigits: 1, minimumFractionDigits: 1,
+  });
+
+  const skipped = {bytes: 0, count: 0};
+  traceTotals.sort((a, b) => b.bytes - a.bytes).forEach((tot, i) => { // sort by bytes.. can change to sort by eventCount here instead.
+    const bytesPct = tot.bytes * 100 / totalBytes;
     if (bytesPct < 1) {
       skipped.bytes += tot.bytes;
       skipped.count += tot.count;
@@ -87,24 +94,24 @@ function reportTotals(traceCats, totalBytes, totalEvents, tracePhs, opts) {
     }
 
     console.log(
-      toKb(tot.bytes).padStart(9), 
-      `${(bytesPct).toLocaleString(undefined, {maximumFractionDigits: 1, minimumFractionDigits: 1})}%`.padStart(6),
-      '  ', 
-      tot.count.toLocaleString().padStart(7), 
-      `${(tot.count * 100/ totalEvents).toLocaleString(undefined, {maximumFractionDigits: 1, minimumFractionDigits: 1})}%`.padStart(6),
-      '  ', 
+      toKb(tot.bytes).padStart(9),
+      `${percentfmt.format(bytesPct)}%`.padStart(6),
+      '  ',
+      tot.count.toLocaleString().padStart(7),
+      `${percentfmt.format(tot.count * 100 / totalEvents)}%`.padStart(6),
+      '  ',
       tot.name
     );
-  })
+  });
 
   // skipped
   console.log(
-    toKb(skipped.bytes).padStart(9), 
-    `${( skipped.bytes * 100/ totalBytes).toLocaleString(undefined, {maximumFractionDigits: 1, minimumFractionDigits: 1})}%`.padStart(6),
-    '  ', 
-    skipped.count.toLocaleString().padStart(7), 
-    `${(skipped.count * 100/ totalEvents).toLocaleString(undefined, {maximumFractionDigits: 1, minimumFractionDigits: 1})}%`.padStart(6),
-    '  ', 
+    toKb(skipped.bytes).padStart(9),
+    `${percentfmt.format( skipped.bytes * 100 / totalBytes)}%`.padStart(6),
+    '  ',
+    skipped.count.toLocaleString().padStart(7),
+    `${percentfmt.format(skipped.count * 100 / totalEvents)}%`.padStart(6),
+    '  ',
     '[(Rows that were < 1% of bytes)]'
   );
 
