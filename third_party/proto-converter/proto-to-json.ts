@@ -8,11 +8,13 @@
  * 
  * 1. use node 23+ to run this .ts without compiling. https://nodejs.org/en/learn/typescript/run-natively
  * 1. open ui.perfetto.dev. load chrome example. hit download.
- * 1. node proto-to-json.js $HOME/chromium/src/third_party/perfetto/protos/perfetto/trace/trace.proto $HOME/Downloads/chrome_example_wikipedia.perfetto_trace.gz ./out-converted.json
+ * 1. node proto-to-json.ts $HOME/chromium/src/third_party/perfetto/protos/perfetto/trace/trace.proto $HOME/Downloads/chrome_example_wikipedia.perfetto_trace.gz ./out-converted.json
 
  *  Something dumb about proto path resolving.. i need an edit in `node_modules/protobufjs/src/root.js`. add this line  within the `fetch` function. L128:
                  filename = filename.replace('protos/protos', 'protos')
 
+ This fails on a newly captured trace, which doesn't make sense since we're refererencing ToT protos.
+  Much of the logic is definitely outdated and it'll take work to nurse it back to something useful.
 
  * 
  * */
@@ -21,6 +23,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import pkg from 'protobufjs';
 const {Root} = pkg;
+import {saveTrace} from '../../trace-file-utils.mjs';
 
 // Usage: node proto-to-json.ts path_to_trace.proto input_file output_file
 
@@ -101,10 +104,10 @@ async function main() {
     const scope = e.flags & TRACE_EVENT_FLAG_HAS_ID && e.scope ? e.scope : undefined;
 
     return {
-      pid: e.processId,
-      tid: e.threadId,
+      pid: e.trustedPid,
+      tid: e.trustedUid,
       ts: parseIntOrThrow(e.timestamp),
-      tts: parseIntOrThrow(e.threadTimestamp),
+      // tts: parseIntOrThrow(e.threadTimestamp),
       ph: String.fromCodePoint(e.phase),
       cat: e.categoryGroupName,
       name: e.name,
@@ -122,14 +125,22 @@ async function main() {
     };
   };
 
+  debugger;
+
+  // const chromeEventsPkts = msg.packet.filter((packet: any) => !!packet.chromeEvents);
+  const trackEventPkts = msg.packet.filter((packet: any) => !!packet.trackEvent);
+
+  // TODO: do something with msg.packet.filter((packet: any) => !!packet.chromeEvents).map(e => e.chromeEvents.metadata)
+  // TODO: maybe there's something hiding in chromeEvents.traceEvents but i think not.
+
+  const traceEvents = trackEventPkts.map(toJSONEvent).flat();
+
   const output = {
-    traceEvents: msg.packet
-      .filter((packet: any) => !!packet.chromeEvents)
-      .map((packet: any) => packet.chromeEvents.traceEvents)
-      .map((traceEvents: any) => traceEvents.map(toJSONEvent))
-      .flat(),
+    traceEvents,
   };
-  await fs.promises.writeFile(process.argv[4], JSON.stringify(output, null, 2));
+
+  await saveTrace(output, process.argv[4]);
+  // await fs.promises.writeFile(process.argv[4], JSON.stringify(output, null, 2));
 }
 
 main().catch(console.error);
