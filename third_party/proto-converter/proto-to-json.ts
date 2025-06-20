@@ -3,20 +3,26 @@
 // found in the LICENSE file.
 
 // From https://chromium-review.googlesource.com/c/v8/v8/+/1535823
+/**
+ *               TRACE_STUFF NOTES
+ * 
+ * 1. use node 23+ to run this .ts without compiling. https://nodejs.org/en/learn/typescript/run-natively
+ * 1. open ui.perfetto.dev. load chrome example. hit download.
+ * 1. node proto-to-json.js $HOME/chromium/src/third_party/perfetto/protos/perfetto/trace/trace.proto $HOME/Downloads/chrome_example_wikipedia.perfetto_trace.gz ./out-converted.json
+
+ *  Something dumb about proto path resolving.. i need an edit in `node_modules/protobufjs/src/root.js`. add this line  within the `fetch` function. L128:
+                 filename = filename.replace('protos/protos', 'protos')
+
+
+ * 
+ * */
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { Root } from 'protobufjs';
+import pkg from 'protobufjs';
+const {Root} = pkg;
 
-// Requirements: node 10.4.0+, npm
-
-// Setup:
-// (nvm is optional, you can also just install node manually)
-// $ nvm use
-// $ npm install
-// $ npm run build
-
-// Usage: node proto-to-json.js path_to_trace.proto input_file output_file
+// Usage: node proto-to-json.ts path_to_trace.proto input_file output_file
 
 // Converts a binary proto file to a 'Trace Event Format' compatible .json file
 // that can be used with chrome://tracing. Documentation of this format:
@@ -30,16 +36,16 @@ import { Root } from 'protobufjs';
 // if the value won't fit.
 function parseIntOrThrow(int: string) {
   if (BigInt(int) > Number.MAX_SAFE_INTEGER) {
-    throw new Error("Loss of int precision");
+    throw new Error('Loss of int precision');
   }
   return Number(int);
 }
 
-function uint64AsHexString(val : string) : string {
-  return "0x" + BigInt(val).toString(16);
+function uint64AsHexString(val: string): string {
+  return '0x' + BigInt(val).toString(16);
 }
 
-function parseArgValue(arg: any) : any {
+function parseArgValue(arg: any): any {
   if (arg.jsonValue) {
     return JSON.parse(arg.jsonValue);
   }
@@ -57,8 +63,7 @@ function parseArgValue(arg: any) : any {
   }
   if (typeof arg.doubleValue !== 'undefined') {
     // Handle [-]Infinity and NaN which protobufjs outputs as strings here.
-    return typeof arg.doubleValue === 'string' ?
-        arg.doubleValue : Number(arg.doubleValue);
+    return typeof arg.doubleValue === 'string' ? arg.doubleValue : Number(arg.doubleValue);
   }
   if (typeof arg.pointerValue !== 'undefined') {
     return uint64AsHexString(arg.pointerValue);
@@ -73,9 +78,9 @@ const TRACE_EVENT_FLAG_FLOW_OUT: number = 1 << 9;
 
 async function main() {
   const root = new Root();
-  const { resolvePath } = root;
+  const {resolvePath} = root;
   const numDirectoriesToStrip = 2;
-  let initialOrigin: string|null;
+  let initialOrigin: string | null;
   root.resolvePath = (origin, target) => {
     if (!origin) {
       initialOrigin = target;
@@ -87,43 +92,42 @@ async function main() {
     return path.resolve(initialOrigin!, target);
   };
   const traceProto = await root.load(process.argv[2]);
-  const Trace = traceProto.lookupType("Trace");
+  const Trace = traceProto.lookupType('Trace');
   const payload = await fs.promises.readFile(process.argv[3]);
   const msg = Trace.decode(payload).toJSON();
+
+  const toJSONEvent = (e: any) => {
+    const bind_id = e.flags & (TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT) ? e.bindId : undefined;
+    const scope = e.flags & TRACE_EVENT_FLAG_HAS_ID && e.scope ? e.scope : undefined;
+
+    return {
+      pid: e.processId,
+      tid: e.threadId,
+      ts: parseIntOrThrow(e.timestamp),
+      tts: parseIntOrThrow(e.threadTimestamp),
+      ph: String.fromCodePoint(e.phase),
+      cat: e.categoryGroupName,
+      name: e.name,
+      dur: parseIntOrThrow(e.duration),
+      tdur: parseIntOrThrow(e.threadDuration),
+      bind_id: bind_id,
+      flow_in: e.flags & TRACE_EVENT_FLAG_FLOW_IN ? true : undefined,
+      flow_out: e.flags & TRACE_EVENT_FLAG_FLOW_OUT ? true : undefined,
+      scope: scope,
+      id: e.flags & TRACE_EVENT_FLAG_HAS_ID ? uint64AsHexString(e.id) : undefined,
+      args: (e.args || []).reduce((js_args: any, proto_arg: any) => {
+        js_args[proto_arg.name] = parseArgValue(proto_arg);
+        return js_args;
+      }, {}),
+    };
+  };
+
   const output = {
     traceEvents: msg.packet
       .filter((packet: any) => !!packet.chromeEvents)
       .map((packet: any) => packet.chromeEvents.traceEvents)
-      .map((traceEvents: any) => traceEvents.map((e: any) => {
-
-        const bind_id = (e.flags & (TRACE_EVENT_FLAG_FLOW_IN |
-          TRACE_EVENT_FLAG_FLOW_OUT)) ? e.bindId : undefined;
-        const scope = (e.flags & TRACE_EVENT_FLAG_HAS_ID) && e.scope ?
-            e.scope : undefined;
-
-        return {
-          pid: e.processId,
-          tid: e.threadId,
-          ts: parseIntOrThrow(e.timestamp),
-          tts: parseIntOrThrow(e.threadTimestamp),
-          ph: String.fromCodePoint(e.phase),
-          cat: e.categoryGroupName,
-          name: e.name,
-          dur: parseIntOrThrow(e.duration),
-          tdur: parseIntOrThrow(e.threadDuration),
-          bind_id: bind_id,
-          flow_in: e.flags & TRACE_EVENT_FLAG_FLOW_IN ? true : undefined,
-          flow_out: e.flags & TRACE_EVENT_FLAG_FLOW_OUT ? true : undefined,
-          scope: scope,
-          id: (e.flags & TRACE_EVENT_FLAG_HAS_ID) ?
-              uint64AsHexString(e.id) : undefined,
-          args: (e.args || []).reduce((js_args: any, proto_arg: any) => {
-            js_args[proto_arg.name] = parseArgValue(proto_arg);
-            return js_args;
-          }, {})
-        };
-      }))
-      .flat()
+      .map((traceEvents: any) => traceEvents.map(toJSONEvent))
+      .flat(),
   };
   await fs.promises.writeFile(process.argv[4], JSON.stringify(output, null, 2));
 }
