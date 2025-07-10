@@ -49,3 +49,4 @@ See [github.com/paulirish/trace.cafe/blob/9aee52…/src/app.js#L9-L19](https://g
 
 Ephemeral Zenith Whispering Cascade
 Quantum Pineapple Serendipity Moonlight
+Fuzzy Logic Pancake Spaceship
