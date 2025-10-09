@@ -1,5 +1,28 @@
-// Take a trace captured from chrome://tracing or perfetto (but converted to json)…
-// And convert it to a trace that DevTools can load as first-class. (not falling back to isGenericTrace handling)
+/**
+ * @fileoverview
+ * This "upgrades" a generic trace file into a DevTools-style trace file.
+ *
+ * "Generic" traces, like those from WebPageTest, about:tracing, or perfetto (as JSON) are
+ * captured at the browser level, across all renderer processes. In contrast, a
+ * trace recorded within DevTools is captured starting from the specific
+ * renderer process of the inspected page.
+ *
+ * This fundamental difference leads to subtle but important distinctions in the
+ * trace data and its presentation in the DevTools Performance panel. For example,
+ * generic traces (see `isGenericTrace` in DevTools source) will label renderer 
+ * threads as "Renderer (####)" while DevTools traces, being renderer-specific,
+ * can provide a cleaner view.
+ *
+ * This script hacks the generic trace JSON to mimic a first-class DevTools-native trace.
+ * The goal is to provide a better, more familiar user experience for developers
+ * analyzing WPT traces (and other generic traces) inside DevTools.
+ * 
+ * Before/after screenshots: https://imgur.com/a/97SUkui
+ * 
+ * Usage:
+ * 
+ *     node generic-trace-to-devtools-trace.mjs somefile.json
+ */
 
 
 import {loadTraceEventsFromFile, saveTrace} from './trace-file-utils.mjs';
