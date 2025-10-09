@@ -53,7 +53,11 @@ for (const e of events) {
   }
   if (e.ph === 'M') continue; // dont attempt with metadata
   const thread = pidToThreadLookup[e.pid][e.tid];
-  if (!thread) throw new Error(`no thread for ${e.pid} ${e.tid}`);
+  if (!thread){
+    // This happens with the `AnyPageLoading` event. Why? dunno.  https://source.chromium.org/chromium/chromium/src/+/main:components/performance_manager/scenarios/browser_performance_scenarios.cc;l=41-54;drc=75a8035abe03764596f30424030465636e82aa70
+    console.error(`no thread for ${e.pid} ${e.tid}`, e);
+    continue;
+  } 
   thread.events.push(e);
 
   if (e.ts !== 0) {

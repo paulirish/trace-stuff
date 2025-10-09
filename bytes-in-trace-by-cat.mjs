@@ -22,6 +22,7 @@ const traceEvents = loadTraceEventsFromFile(filename);
 console.log('event count: ', traceEvents.length.toLocaleString());
 
 
+
 iterateTrace();
 iterateTrace({aggregateBy: true});
 
@@ -33,8 +34,15 @@ function iterateTrace(opts = {aggregateBy: false}) {
   let totalBytes = 0;
   let totalEvents = 0;
 
+  let outofOrder = {};
+  traceEvents.forEach((e, i) => {
 
-  traceEvents.forEach(e => {
+    if (e.ts === undefined || e.null) { throw new Error('Invalid trace event'); }
+    if (i > 0 && e.ts < traceEvents[i - 1].ts) {
+      outofOrder[e.cat] = outofOrder[e.cat] || 0;
+      outofOrder[e.cat]++;
+    }
+
     const eventCats = e.cat;
 
     const splittedCats = opts.aggregateBy ? [eventCats] : eventCats.split(',');
@@ -57,6 +65,7 @@ function iterateTrace(opts = {aggregateBy: false}) {
   });
 
   reportTotals(traceCats, totalBytes, totalEvents, tracePhs, opts);
+  console.log('outofOrder:', outofOrder);
 }
 
 
