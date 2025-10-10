@@ -35,13 +35,12 @@ function iterateTrace(opts = {aggregateBy: false}) {
   let totalEvents = 0;
 
   let outofOrder = {};
-  traceEvents.forEach((e, i) => {
+    traceEvents.forEach((e, i) => {
 
-    if (e.ts === undefined || e.null) { throw new Error('Invalid trace event'); }
-    if (i > 0 && e.ts < traceEvents[i - 1].ts) {
-      outofOrder[e.cat] = outofOrder[e.cat] || 0;
-      outofOrder[e.cat]++;
-    }
+      if (i > 0 && e.ts < traceEvents[i - 1].ts) {
+        outofOrder[e.cat] = outofOrder[e.cat] || 0;
+        outofOrder[e.cat]++;
+      }
 
     const eventCats = e.cat;
 
