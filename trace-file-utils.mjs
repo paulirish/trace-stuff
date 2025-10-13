@@ -5,6 +5,12 @@ import fs from 'fs';
 import zlib from 'zlib';
 import {strict as assert} from 'assert';
 
+import {
+  open
+} from 'node:fs/promises';
+
+import {TraceEventStreamingParser, parseTraceJsonAsStream} from './trace-stream-parse.mts'
+
 /**
  * Generates a JSON representation of an array of objects with the objects
  * printed one per line for a more readable (but not too verbose) version.
@@ -38,6 +44,9 @@ function* arrayOfObjectsJsonGenerator(arrayOfObjects) {
   yield '\n]';
 }
 
+
+
+
 /**
  * Generates a JSON representation of trace line-by-line for a nicer printed
  * version with one trace event per line.
@@ -46,7 +55,7 @@ function* arrayOfObjectsJsonGenerator(arrayOfObjects) {
  * @return IterableIterator<string>
  */
 export function* traceJsonGenerator(trace) {
-  const {traceEvents, metadata, ...rest} = trace;
+const {traceEvents, metadata, ...rest} = trace;
   if (Object.keys(rest).length) throw new Error('unexpected contents in tracefile. not traceEvents or metadata! : ' + JSON.stringify(rest).slice(0, 1000));
 
   yield '{"traceEvents": ';
@@ -131,21 +140,34 @@ export function readJson(filePath) {
 }
 
 /**
- * @param {string=} filename
+ * @param {string} filename
  * @returns TraceEvent[]
  */
-export function loadTraceEventsFromFile(filename) {
+export async function loadTraceEventsFromFile(filename) {
   if (!fs.existsSync(filename)) {
     throw new Error('File not found. ' + filename);
   }
   let fileBuf = fs.readFileSync(filename);
   let data;
-  if (isGzip(fileBuf)) {
-    data = zlib.gunzipSync(fileBuf);
-  } else {
-    data = fileBuf.toString('utf8');
+  let json;
+  try {
+    if (isGzip(fileBuf)) {
+      data = zlib.gunzipSync(fileBuf);
+    } else {
+      data = fileBuf.toString('utf8');
+    }
+    json = JSON.parse(data);
+  }catch (e) {
+    fileBuf = undefined;
+    const file = await open(filename);
+    const readStream = file.readableWebStream({});
+    // const file = new File([fileBuf], 'trace.json', {type: 'application/json'});
+    json = await parseTraceJsonAsStream(readStream, {plainStreamForTest: undefined});
+
+    await file.close();
+    // console.warn('omg error unzipping. trying as utf8', e);
   }
-  const json = JSON.parse(data);
+
   // clear memory
   fileBuf = data = '';
   const traceEvents = json.traceEvents ?? json;
@@ -161,11 +183,10 @@ export function loadTraceEventsFromFile(filename) {
  * @param {ArrayBuffer} ab
  * @returns boolean
  */
-function isGzip(ab) {
+export function isGzip(ab) {
   const buf = new Uint8Array(ab);
   if (!buf || buf.length < 3) {
     return false;
   }
   return buf[0] === 0x1F && buf[1] === 0x8B && buf[2] === 0x08;
 }
-

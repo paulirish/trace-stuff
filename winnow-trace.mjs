@@ -74,7 +74,7 @@ function adjustCPUProfilesForTimeCrop(e, cpuProfileData) {
 }
 
 export async function resaveTrace(filename, filterEventFn) {
-  const traceEvents = loadTraceEventsFromFile(filename);
+  const traceEvents = await loadTraceEventsFromFile(filename);
   console.log('Refomatting', traceEvents.length, 'events');
 
   const cpuProfileData = typeof isTsWithinRange === 'function' ? await Promise.all(extractCPUProfileData(traceEvents)) : [];

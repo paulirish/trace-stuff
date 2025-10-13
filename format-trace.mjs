@@ -5,7 +5,7 @@ import path from 'node:path';
 import {saveTrace, loadTraceEventsFromFile} from './trace-file-utils.mjs';
 
 export async function resaveTrace(filename, filterEventFn) {
-  const traceEvents = loadTraceEventsFromFile(filename);
+  const traceEvents = await loadTraceEventsFromFile(filename);
   const afterFilename = `${filename}.formatted.json`;
   await saveTrace({traceEvents}, afterFilename);
   console.log(`Written: ${afterFilename}`);

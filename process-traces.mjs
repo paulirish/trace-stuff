@@ -83,7 +83,7 @@ async function parseTraceText(filename) {
 
   let traceEvents;
   try {
-    traceEvents = loadTraceEventsFromFile(filename);
+    traceEvents = await loadTraceEventsFromFile(filename);
   } catch (e) {
     console.warn(e.message);
     return;

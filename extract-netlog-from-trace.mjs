@@ -112,7 +112,7 @@ if (import.meta.url.endsWith(process?.argv[1])) {
 async function cli() {
   const filename = path.resolve(process.cwd(), process.argv[2]);
 
-  const traceEvents = loadTraceEventsFromFile(filename);
+  const traceEvents = await loadTraceEventsFromFile(filename);
   const netlog = extractNetlog(traceEvents);
   console.log(`counts:
     eventTypes: ${Object.keys(netlog.constants.logEventTypes).length},

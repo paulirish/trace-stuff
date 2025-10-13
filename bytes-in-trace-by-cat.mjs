@@ -18,7 +18,7 @@ const stat = fs.statSync(filename);
 console.log('size:', ( stat.size / 1_000_000).toLocaleString(), 'MB');
 console.log('first by event name + category. then by category');
 
-const traceEvents = loadTraceEventsFromFile(filename);
+const traceEvents = await loadTraceEventsFromFile(filename);
 console.log('event count: ', traceEvents.length.toLocaleString());
 
 

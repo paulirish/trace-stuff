@@ -5,8 +5,8 @@
     "emitDeclarationOnly": true,
     "declarationMap": true,
 
-    "target": "es2020",
-    "module": "es2020",
+    "target": "esnext",
+    "module": "nodenext",
     "moduleResolution": "node",
     "esModuleInterop": true,
 
@@ -14,6 +14,13 @@
     "checkJs": true,
     "strict": true,
     "forceConsistentCasingInFileNames": true,
+
+
+    // typescript node .  https://nodesource.com/blog/Node.js-Supports-TypeScript-Natively
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
 
 
     "lib": ["ESNext", "dom"]
@@ -29,9 +36,11 @@
     "types/*.d.ts",
     "*.js",
     "*.mjs",
+    "*.mts",
     // not third_party yet
 
-    // "node_modules/devtools-protocol/types/protocol.d.ts",
+
+    "@paulirish/trace_engine/generated/protocol.d.ts",
 
     // TODO(esmodules): JSON files included via resolveJsonModule. Removable on the switch to ES Modules.
     "package.json"

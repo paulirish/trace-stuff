@@ -31,7 +31,7 @@ const passedArg = process.argv[2];
 const tracefilename = passedArg ? passedArg : './myjansatta.json';
 
 /** @type {TraceEvent[]} */
-const events = loadTraceEventsFromFile(tracefilename);
+const events = await loadTraceEventsFromFile(tracefilename);
 console.log(events.length);
 
 let minTs = Infinity;

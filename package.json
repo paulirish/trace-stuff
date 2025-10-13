@@ -1,0 +1,28 @@
+{
+  "name": "trace-stuff",
+  "version": "1.0.0",
+  "description": "This repo is messy.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paulirish/trace-stuff.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/paulirish/trace-stuff/issues"
+  },
+  "homepage": "https://github.com/paulirish/trace-stuff#readme",
+  "dependencies": {
+     "@paulirish/trace_engine": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.1",
+    "glob": "^11.0.3"
+  }
+}
