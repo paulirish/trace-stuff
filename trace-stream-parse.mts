@@ -24,9 +24,10 @@ export type AsyncReadableTraceParserStream = AsyncReadableStream<ParserOutput>;
  * Parses a trace file (which may be gzipped) in a streaming manner.
  */
 export async function parseTraceJsonAsStream(
-    file: File|ReadableStream, {earlyReturnOnEnhancedTrace = false, plainStreamForTest = undefined, forceUngzip = false}: {
+    file: File|ReadableStream, {earlyReturnOnEnhancedTrace = false, plainStreamForTest = undefined, forceUngzip = false, size = null}: {
       earlyReturnOnEnhancedTrace?: boolean,
       forceUngzip?: boolean,
+      size?: number|null,
       plainStreamForTest?: ReadableStream,
     } = {}): Promise<Trace.Types.File.TraceFile> {
   let events: Trace.Types.Events.Event[] = [];
@@ -34,23 +35,22 @@ export async function parseTraceJsonAsStream(
 
   const inputStream = file instanceof ReadableStream ? file : await fileToStream(file);
   const parser = new TraceEventStreamingParser(earlyReturnOnEnhancedTrace);
-  
+
   const chunker = new ChunkSizer({ chunkSize: 5_000_000 }); // 5M
+  const progressTracker = size ? createProgressTracker(size) : null;
 
   let stream = inputStream;
   stream = forceUngzip ? stream.pipeThrough(new DecompressionStream('gzip')) : stream;
   stream = !plainStreamForTest ? stream.pipeThrough(chunker).pipeThrough(new TextDecoderStream('utf-8')) : plainStreamForTest;
+  if (progressTracker) {
+    stream = stream.pipeThrough(progressTracker);
+  }
   const parsedStream = stream.pipeThrough(parser);
 
   for await (const value of (parsedStream as AsyncReadableTraceParserStream)) {
      if (value.type === 'events') {
-      parser.count += value.data.length;
-      const expectedEvtCount = 4_000_000;
-      process.stdout.write(`\n${(parser.count / expectedEvtCount * 100).toLocaleString()}% `);
-
       events = events.concat(value.data);
     } else if (value.type === 'metadata') {
-      process.stdout.write(`M`);
       metadata = value.data;
     }
   }
@@ -83,7 +83,6 @@ export class TraceEventStreamingParser extends TransformStream<string, ParserOut
   #buffer = '';
   #state: ParserState = 'metadata';
   #earlyReturnOnEnhancedTrace = false;
-  count = 0;
 
   constructor(earlyReturnOnEnhancedTrace: boolean) {
     super({
@@ -219,4 +218,32 @@ class ChunkSizer extends TransformStream {
       this.#buffer = this.#buffer.slice(this.#chunkSize);
     }
   }
+}
+
+
+/**
+ * Creates a TransformStream that monitors the byte flow and logs progress.
+ * It's a "pass-through" stream that inspects data without changing it.
+ * @param totalSize The total size of the source file in bytes.
+ * @returns A TransformStream that can be used in a pipeline.
+ */
+function createProgressTracker(totalSize: number): TransformStream<Uint8Array, Uint8Array> {
+  let bytesRead = 0;
+  return new TransformStream({
+    transform(chunk, controller) {
+      bytesRead += chunk.length;
+      const percentage = ((bytesRead / totalSize) * 100).toFixed(2);
+      // Use process.stdout.write with a carriage return (\r) to
+      // write the progress on the same line in the console.
+      const fmt = (n: number) => (n / 1_000_000).toLocaleString(undefined, {maximumFractionDigits: 2});
+      process.stdout.write(`Reading file... ${percentage}% complete (${fmt(bytesRead)} MB / ${fmt(totalSize)} MB)\r`);
+
+      // Pass the chunk along to the next stream in the chain.
+      controller.enqueue(chunk);
+    },
+    flush() {
+      // Print a newline at the end so the next console log isn't on the same line.
+      process.stdout.write('\n');
+    },
+  });
 }

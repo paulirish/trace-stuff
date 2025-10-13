@@ -5,9 +5,7 @@ import fs from 'fs';
 import zlib from 'zlib';
 import {strict as assert} from 'assert';
 
-import {
-  open
-} from 'node:fs/promises';
+import {open, stat} from 'node:fs/promises';
 
 import {TraceEventStreamingParser, parseTraceJsonAsStream} from './trace-stream-parse.mts'
 
@@ -158,12 +156,13 @@ export async function loadTraceEventsFromFile(filename) {
     }
     json = JSON.parse(data);
   }catch (e) {
+    const {size} = await stat(filename);
     const forceUngzip = isGzip(fileBuf);
     fileBuf = undefined;
     const file = await open(filename);
     const readStream = file.readableWebStream({});
     // const file = new File([fileBuf], 'trace.json', {type: 'application/json'});
-    json = await parseTraceJsonAsStream(readStream, {forceUngzip});
+    json = await parseTraceJsonAsStream(readStream, {forceUngzip, size});
 
     await file.close();
     // console.warn('omg error unzipping. trying as utf8', e);
