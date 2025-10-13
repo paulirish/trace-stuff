@@ -158,11 +158,12 @@ export async function loadTraceEventsFromFile(filename) {
     }
     json = JSON.parse(data);
   }catch (e) {
+    const forceUngzip = isGzip(fileBuf);
     fileBuf = undefined;
     const file = await open(filename);
     const readStream = file.readableWebStream({});
     // const file = new File([fileBuf], 'trace.json', {type: 'application/json'});
-    json = await parseTraceJsonAsStream(readStream, {plainStreamForTest: undefined});
+    json = await parseTraceJsonAsStream(readStream, {forceUngzip});
 
     await file.close();
     // console.warn('omg error unzipping. trying as utf8', e);

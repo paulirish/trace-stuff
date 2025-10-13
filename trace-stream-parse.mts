@@ -24,8 +24,9 @@ export type AsyncReadableTraceParserStream = AsyncReadableStream<ParserOutput>;
  * Parses a trace file (which may be gzipped) in a streaming manner.
  */
 export async function parseTraceJsonAsStream(
-    file: File|ReadableStream, {earlyReturnOnEnhancedTrace = false, plainStreamForTest = undefined}: {
+    file: File|ReadableStream, {earlyReturnOnEnhancedTrace = false, plainStreamForTest = undefined, forceUngzip = false}: {
       earlyReturnOnEnhancedTrace?: boolean,
+      forceUngzip?: boolean,
       plainStreamForTest?: ReadableStream,
     } = {}): Promise<Trace.Types.File.TraceFile> {
   let events: Trace.Types.Events.Event[] = [];
@@ -36,7 +37,9 @@ export async function parseTraceJsonAsStream(
   
   const chunker = new ChunkSizer({ chunkSize: 5_000_000 }); // 5M
 
-  const stream = !plainStreamForTest ? inputStream.pipeThrough(chunker).pipeThrough(new TextDecoderStream('utf-8')) : plainStreamForTest;
+  let stream = inputStream;
+  stream = forceUngzip ? stream.pipeThrough(new DecompressionStream('gzip')) : stream;
+  stream = !plainStreamForTest ? stream.pipeThrough(chunker).pipeThrough(new TextDecoderStream('utf-8')) : plainStreamForTest;
   const parsedStream = stream.pipeThrough(parser);
 
   for await (const value of (parsedStream as AsyncReadableTraceParserStream)) {
