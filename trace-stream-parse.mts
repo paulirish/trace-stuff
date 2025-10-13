@@ -37,7 +37,8 @@ export async function parseTraceJsonAsStream(
   const parser = new TraceEventStreamingParser(earlyReturnOnEnhancedTrace);
 
   const chunker = new ChunkSizer({ chunkSize: 5_000_000 }); // 5M
-  const progressTracker = size ? createProgressTracker(size) : null;
+  // 19x is a rough estimate of the typical compression ratio for gzip traces.
+  const progressTracker = size ? createProgressTracker( forceUngzip ? size * 19 : size) : null;
 
   let stream = inputStream;
   stream = forceUngzip ? stream.pipeThrough(new DecompressionStream('gzip')) : stream;
