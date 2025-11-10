@@ -82,8 +82,10 @@ async function parseTraceText(filename) {
   process.stderr.write(`\n🥳 Loading… ${filename.replace(os.homedir(), '$HOME')}`);
 
   let traceEvents;
+  let metadata;
   try {
     traceEvents = await loadTraceEventsFromFile(filename);
+    metadata = traceEvents.metadata;
   } catch (e) {
     console.warn(e.message);
     return;
@@ -92,6 +94,7 @@ async function parseTraceText(filename) {
   process.stderr.write(`  ${traceEvents.length.toLocaleString()} evts\n`);
   const trace = {
     traceEvents,
+    metadata,
   };
   if (typeof trace?.traceEvents?.at(0)?.pid === 'undefined') {
     console.error('\n❌ ... skipping. not an actual trace.', filename);
@@ -99,7 +102,7 @@ async function parseTraceText(filename) {
   }
 
 
-  const logFatal = tag => e => { 
+  const logFatal = tag => e => {
     process.stdout.write(`\n- ‼️ ${tag} FATAL: ${e.message}`) && false;
     const signature = e.stack.split('\n').slice(0,2).join(' | ')
     const failuresPerMessage = allFailures.get(signature) ?? [];
@@ -176,8 +179,13 @@ async function assertLighthouseData(proTrace) {
 
 async function processWithTraceEngine(trace) {
     const model = Trace.TraceModel.Model.createWithAllHandlers(Trace.Types.Configuration.DEFAULT);
-    await model.parse(trace.traceEvents);
-    return model; 
+    // if (!trace.metadata?.enhancedTraceVersion) {
+    //   console.log('no enhancedTraceVersion. skip');
+    //   return;
+    // }
+
+    await model.parse(trace.traceEvents, {metadata: trace.metadata});
+    return model;
 }
 
 async function assertEngineData(model, filename) {
