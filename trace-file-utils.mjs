@@ -235,7 +235,7 @@ export class TraceEventStreamingParser extends TransformStream {
     this.#buffer += chunk;
 
     if (this.#state === 'metadata') {
-      const metaEndMarker = new RegExp(',?\\s*"traceEvents": \\[');
+      const metaEndMarker = new RegExp(',?\\s*"traceEvents"\\s*:\\s*\\[');
       const match = this.#buffer.match(metaEndMarker);
 
       if (match?.index !== undefined) {
@@ -261,96 +261,111 @@ export class TraceEventStreamingParser extends TransformStream {
     }
 
     if (this.#state === 'events') {
-        const arrayEndMatch = this.#buffer.match(/^\s*\]/m);
-        let chunkToProcess;
-        let switchToMetadata = false;
+        const { events, remaining, done } = this.#extractObjects(this.#buffer);
+        this.#buffer = remaining;
 
-        if (arrayEndMatch) {
-            // Found the end of array.
-            const endIndex = arrayEndMatch.index;
-            chunkToProcess = this.#buffer.substring(0, endIndex);
-            this.#buffer = this.#buffer.substring(endIndex); // starts with `]`
-            switchToMetadata = true;
-        } else {
-            // No end of array yet. Process up to last newline.
-            const lastNewline = this.#buffer.lastIndexOf('\n');
-            if (lastNewline === -1) return;
-            chunkToProcess = this.#buffer.substring(0, lastNewline);
-            this.#buffer = this.#buffer.substring(lastNewline + 1);
+        if (events.length > 0) {
+            controller.enqueue({type: 'events', data: events});
         }
 
-        // Process `chunkToProcess` as events
-        let processable = chunkToProcess.trim();
-        if (processable.endsWith(',')) {
-             processable = processable.slice(0, -1);
-        }
-
-        if (processable) {
-             const jsonArrayStr = `[${processable}]`;
-             try {
-                const events = JSON.parse(jsonArrayStr);
-                controller.enqueue({type: 'events', data: events});
-             } catch (e) {
-                // If parsing fails, it might be due to a split in the middle of an object,
-                // or malformed JSON.
-                // In a robust implementation we might want to buffer more, but
-                // since we split on newlines (which is safe for traceJsonGenerator and standard pretty print),
-                // failure here is likely a real error.
-                // For minified JSON (no newlines), we process the whole block at once (if we find `]`),
-                // or we wait until end of stream.
-                // Wait, if no newlines, `lastNewline` is -1. We return.
-                // We keep buffering until `]` is found or stream ends.
-                // If stream ends without `]`, what happens?
-                // The buffer grows indefinitely. This is a risk for huge minified files without `]`.
-                // But valid trace files have `]`.
-                 throw new Error('Streaming trace JSON parse failed.', {cause: e});
-             }
-        }
-
-        if (switchToMetadata) {
+        if (done) {
             this.#state = 'metadata_end';
-            // Advance past `]`
-            const closeIndex = this.#buffer.indexOf(']');
-            this.#buffer = this.#buffer.substring(closeIndex + 1);
+            // The buffer already points past the closing `]`.
         }
     }
   }
 
-  #handleFlush(controller) {
-      if (this.#state === 'events') {
-          // If we are still in events state at the end of the stream, it means we didn't find the closing ']'
-          // via newlines (e.g. minified JSON). We must process the remaining buffer.
-          // We look for the closing `]`. A safe heuristic for traces is `],` (start of metadata) or `]}` (end of file).
-          let closeIndex = this.#buffer.lastIndexOf('],');
-          if (closeIndex === -1) {
-              closeIndex = this.#buffer.lastIndexOf(']}');
+  #extractObjects(buffer) {
+      const events = [];
+      let i = 0;
+      let depth = 0;
+      let inString = false;
+      let escape = false;
+      let start = 0;
+      let done = false;
+
+      // We scan the buffer for objects separated by commas or the end of the array `]`.
+
+      for (; i < buffer.length; i++) {
+          const char = buffer[i];
+
+          if (escape) {
+              escape = false;
+              continue;
+          }
+          if (char === '\\') {
+              escape = true;
+              continue;
+          }
+          if (char === '"') {
+              inString = !inString;
+              continue;
           }
 
-          if (closeIndex !== -1) {
-              // Found the end of events array.
-              const eventsStr = this.#buffer.substring(0, closeIndex);
-              const remaining = this.#buffer.substring(closeIndex + 1); // Starts with `,` or `}`
+          if (!inString) {
+              if (char === '{') {
+                  depth++;
+              } else if (char === '}') {
+                  depth--;
+              } else if (char === ']' && depth === 0) {
+                  // End of array.
+                  const slice = buffer.substring(start, i).trim();
+                  if (slice && slice !== ',') {
+                      // slice might have trailing comma from previous iteration if we didn't advance start properly?
+                      // If slice is `...obj`.
+                      // Trailing comma check?
+                      let cleanSlice = slice;
+                      if (cleanSlice.endsWith(',')) cleanSlice = cleanSlice.slice(0, -1);
+                      if (cleanSlice.trim()) {
+                          try { events.push(JSON.parse(cleanSlice)); } catch(e) {}
+                      }
+                  }
 
-              if (eventsStr.trim()) {
-                   const jsonArrayStr = `[${eventsStr}]`;
-                   try {
-                        const events = JSON.parse(jsonArrayStr);
-                        controller.enqueue({type: 'events', data: events});
-                   } catch (e) {
-                        throw new Error('Streaming trace JSON parse failed (at flush).', {cause: e});
-                   }
+                  return { events, remaining: buffer.substring(i + 1), done: true };
+              } else if (char === ',' && depth === 0) {
+                  // End of an object.
+                  const slice = buffer.substring(start, i).trim();
+                  if (slice) {
+                      try {
+                          events.push(JSON.parse(slice));
+                      } catch (e) {
+                          // Might be empty or just whitespace?
+                      }
+                  }
+                  start = i + 1;
               }
+          }
+      }
 
-              this.#buffer = remaining;
-              this.#state = 'metadata_end';
-          } else {
-              // Could not find closing `]`. The file might be truncated or malformed.
-              // We can try to parse whatever we have as events?
-              // But without `]`, it's invalid JSON array.
-              // Maybe we simply do nothing and let it finish (partial data loss but no crash)?
-              // Or throw?
-              // Existing logic implies we should have found `]`.
-              // But if the file is just `{"traceEvents": [ ...`, and truncated, we can't do much.
+      // If we are here, we ran out of buffer but did not find `]`.
+      // We return what we parsed so far, and the remaining partial buffer.
+      // `start` points to the beginning of the incomplete object.
+      return { events, remaining: buffer.substring(start), done: false };
+  }
+
+  #handleFlush(controller) {
+      if (this.#state === 'events') {
+          // If state is events, we expect to have found `]`.
+          // If we are here, we have remaining buffer.
+          // Try to parse it?
+          // If it is just whitespace, ignore.
+          // If it is `...obj`, but no `]`.
+          // If truncated file.
+          if (this.#buffer.trim()) {
+               try {
+                   // Try wrapping in [] just in case?
+                   // Or just parse?
+                   // If it's one object:
+                   const events = [];
+                   let s = this.#buffer.trim();
+                   if (s.endsWith(',')) s = s.slice(0, -1);
+                   if (s) {
+                        events.push(JSON.parse(s));
+                        controller.enqueue({type: 'events', data: events});
+                   }
+               } catch(e) {
+                   // Ignore
+               }
           }
       }
 

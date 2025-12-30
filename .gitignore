@@ -1,5 +1,2 @@
-*.cpuprofile
-
-myjansatta.json
-coo.f.json
-coo.json
+test_large_*.json
+test_large_*.json.gz
