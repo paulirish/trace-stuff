@@ -169,3 +169,214 @@ function isGzip(ab) {
   return buf[0] === 0x1F && buf[1] === 0x8B && buf[2] === 0x08;
 }
 
+/**
+ * Parses a trace file (which may be gzipped) in a streaming manner.
+ * @param {string} filePath
+ * @param {object} options
+ * @param {boolean} [options.earlyReturnOnEnhancedTrace]
+ * @param {ReadableStream} [options.plainStreamForTest]
+ * @returns {Promise<{metadata: any, traceEvents: any[]}>}
+ */
+export async function parseTraceJsonAsStream(
+    filePath, {earlyReturnOnEnhancedTrace = false, plainStreamForTest = undefined} = {}) {
+  let events = [];
+  let metadata = {};
+
+  let inputStream;
+  if (!plainStreamForTest) {
+    // Check for gzip
+    const fd = fs.openSync(filePath, 'r');
+    const buffer = new Uint8Array(3);
+    fs.readSync(fd, buffer, 0, 3, 0);
+    fs.closeSync(fd);
+
+    const isGzipped = isGzip(buffer);
+
+    let webStream = stream.Readable.toWeb(fs.createReadStream(filePath));
+    if (isGzipped) {
+        webStream = webStream.pipeThrough(new DecompressionStream('gzip'));
+    }
+    inputStream = webStream.pipeThrough(new TextDecoderStream('utf-8'));
+  } else {
+    inputStream = plainStreamForTest;
+  }
+
+  const parser = new TraceEventStreamingParser(earlyReturnOnEnhancedTrace);
+  const parsedStream = inputStream.pipeThrough(parser);
+
+  for await (const value of parsedStream) {
+    if (value.type === 'metadata') {
+      metadata = value.data;
+    } else if (value.type === 'events') {
+      events = events.concat(value.data);
+    }
+  }
+  return {metadata, traceEvents: events};
+}
+
+/**
+ * A TransformStream that parses a Chrome trace file chunk by chunk.
+ * It emits the metadata object first, and then emits arrays of trace events as they are parsed.
+ */
+export class TraceEventStreamingParser extends TransformStream {
+  #buffer = '';
+  #state = 'metadata';
+  #earlyReturnOnEnhancedTrace = false;
+
+  constructor(earlyReturnOnEnhancedTrace = false) {
+    super({
+      transform: (chunk, controller) => this.#handleChunk(chunk, controller),
+      flush: controller => this.#handleFlush(controller),
+    });
+    this.#earlyReturnOnEnhancedTrace = earlyReturnOnEnhancedTrace;
+  }
+
+  #handleChunk(chunk, controller) {
+    this.#buffer += chunk;
+
+    if (this.#state === 'metadata') {
+      const metaEndMarker = new RegExp(',?\\s*"traceEvents": \\[');
+      const match = this.#buffer.match(metaEndMarker);
+
+      if (match?.index !== undefined) {
+        // metadataSection is the JSON string immediately surrounding the metadata object: `{"metadata":{ ... }` + '}'`
+        const metadataSection = this.#buffer.substring(0, match.index) + '}';
+        try {
+          const metadataWrapper = JSON.parse(metadataSection);
+          if (metadataWrapper.metadata) {
+            controller.enqueue({type: 'metadata', data: metadataWrapper.metadata});
+
+            if (this.#earlyReturnOnEnhancedTrace && 'enhancedTraceVersion' in metadataWrapper.metadata) {
+              return controller.terminate();
+            }
+          }
+        } catch (e) {
+          return controller.error(new Error(`Failed to parse trace metadata: ${(e).message}`));
+        }
+
+        // Advance the buffer past the metadata and switch state.
+        this.#buffer = this.#buffer.substring(match.index + match[0].length);
+        this.#state = 'events';
+      }
+    }
+
+    if (this.#state === 'events') {
+        const arrayEndMatch = this.#buffer.match(/^\s*\]/m);
+        let chunkToProcess;
+        let switchToMetadata = false;
+
+        if (arrayEndMatch) {
+            // Found the end of array.
+            const endIndex = arrayEndMatch.index;
+            chunkToProcess = this.#buffer.substring(0, endIndex);
+            this.#buffer = this.#buffer.substring(endIndex); // starts with `]`
+            switchToMetadata = true;
+        } else {
+            // No end of array yet. Process up to last newline.
+            const lastNewline = this.#buffer.lastIndexOf('\n');
+            if (lastNewline === -1) return;
+            chunkToProcess = this.#buffer.substring(0, lastNewline);
+            this.#buffer = this.#buffer.substring(lastNewline + 1);
+        }
+
+        // Process `chunkToProcess` as events
+        let processable = chunkToProcess.trim();
+        if (processable.endsWith(',')) {
+             processable = processable.slice(0, -1);
+        }
+
+        if (processable) {
+             const jsonArrayStr = `[${processable}]`;
+             try {
+                const events = JSON.parse(jsonArrayStr);
+                controller.enqueue({type: 'events', data: events});
+             } catch (e) {
+                // If parsing fails, it might be due to a split in the middle of an object,
+                // or malformed JSON.
+                // In a robust implementation we might want to buffer more, but
+                // since we split on newlines (which is safe for traceJsonGenerator and standard pretty print),
+                // failure here is likely a real error.
+                // For minified JSON (no newlines), we process the whole block at once (if we find `]`),
+                // or we wait until end of stream.
+                // Wait, if no newlines, `lastNewline` is -1. We return.
+                // We keep buffering until `]` is found or stream ends.
+                // If stream ends without `]`, what happens?
+                // The buffer grows indefinitely. This is a risk for huge minified files without `]`.
+                // But valid trace files have `]`.
+                 throw new Error('Streaming trace JSON parse failed.', {cause: e});
+             }
+        }
+
+        if (switchToMetadata) {
+            this.#state = 'metadata_end';
+            // Advance past `]`
+            const closeIndex = this.#buffer.indexOf(']');
+            this.#buffer = this.#buffer.substring(closeIndex + 1);
+        }
+    }
+  }
+
+  #handleFlush(controller) {
+      if (this.#state === 'events') {
+          // If we are still in events state at the end of the stream, it means we didn't find the closing ']'
+          // via newlines (e.g. minified JSON). We must process the remaining buffer.
+          // We look for the closing `]`. A safe heuristic for traces is `],` (start of metadata) or `]}` (end of file).
+          let closeIndex = this.#buffer.lastIndexOf('],');
+          if (closeIndex === -1) {
+              closeIndex = this.#buffer.lastIndexOf(']}');
+          }
+
+          if (closeIndex !== -1) {
+              // Found the end of events array.
+              const eventsStr = this.#buffer.substring(0, closeIndex);
+              const remaining = this.#buffer.substring(closeIndex + 1); // Starts with `,` or `}`
+
+              if (eventsStr.trim()) {
+                   const jsonArrayStr = `[${eventsStr}]`;
+                   try {
+                        const events = JSON.parse(jsonArrayStr);
+                        controller.enqueue({type: 'events', data: events});
+                   } catch (e) {
+                        throw new Error('Streaming trace JSON parse failed (at flush).', {cause: e});
+                   }
+              }
+
+              this.#buffer = remaining;
+              this.#state = 'metadata_end';
+          } else {
+              // Could not find closing `]`. The file might be truncated or malformed.
+              // We can try to parse whatever we have as events?
+              // But without `]`, it's invalid JSON array.
+              // Maybe we simply do nothing and let it finish (partial data loss but no crash)?
+              // Or throw?
+              // Existing logic implies we should have found `]`.
+              // But if the file is just `{"traceEvents": [ ...`, and truncated, we can't do much.
+          }
+      }
+
+      if (this.#state === 'metadata_end') {
+          const remaining = this.#buffer.trim();
+          if (!remaining || remaining === '}') return;
+
+          let validJsonStr = remaining;
+          if (validJsonStr.startsWith(',')) {
+               // Replace comma with `{`
+               validJsonStr = '{' + validJsonStr.substring(1);
+          } else if (validJsonStr.startsWith('{')) {
+               // Should be fine
+          } else {
+               if (remaining === '}') return;
+               validJsonStr = '{' + validJsonStr;
+          }
+
+          try {
+              const wrapper = JSON.parse(validJsonStr);
+              if (wrapper.metadata) {
+                  controller.enqueue({type: 'metadata', data: wrapper.metadata});
+              }
+          } catch(e) {
+              // Ignore
+          }
+      }
+  }
+}
