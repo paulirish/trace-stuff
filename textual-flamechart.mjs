@@ -7,7 +7,7 @@
  *   ./textual-flamechart.mjs <input-trace.json> [output-file.txt] [options]
  *
  * Options:
- *   --limit=150       Target number of events to show (default: 150)
+ *   --limit=75       Target number of events to show (default: 75)
  *   --start=0         Start time in ms (relative to trace start)
  *   --end=999999      End time in ms (relative to trace start)
  *   --summary         Show aggregate time summary
@@ -28,7 +28,7 @@ import {loadTraceEventsFromFile} from './trace-file-utils.mjs';
  */
 export async function traceToText(inputFile, outputFile, options = {}) {
   const {
-    limit = 150,
+    limit = 75,
     start = 0,
     end = Infinity,
     summary = false,
@@ -96,13 +96,13 @@ export async function traceToText(inputFile, outputFile, options = {}) {
         while (stack.length > 0 && (stack[stack.length - 1].ts + stack[stack.length - 1].dur <= e.ts)) {
           stack.pop();
         }
-        
+
         if (!stats.has(e.name)) stats.set(e.name, {totalTime: 0, selfTime: 0, count: 0});
         const s = stats.get(e.name);
         s.totalTime += e.dur || 0;
         s.selfTime += e.dur || 0;
         s.count++;
-        
+
         if (stack.length > 0) {
           const parent = stats.get(stack[stack.length - 1].name);
           parent.selfTime -= e.dur || 0;
@@ -137,7 +137,7 @@ export async function traceToText(inputFile, outputFile, options = {}) {
 
     // Build the tree for --find support
     tEvents.sort((a, b) => a.ts - b.ts || b.dur - a.dur);
-    
+
     const threadOutput = [];
     const stack = [];
     let matchesFoundInThread = false;
@@ -164,7 +164,7 @@ export async function traceToText(inputFile, outputFile, options = {}) {
       const startStr = startOffset.toFixed(1).padStart(8);
       const durStr = duration.toFixed(1).padStart(8);
       const indent = '  '.repeat(stack.length);
-      
+
       let line = `${indent}${startStr} ${durStr} ${cleanName}`;
       if (includeArgs && e.args) {
         line += ` | args: ${JSON.stringify(e.args)}`;
@@ -194,7 +194,7 @@ export async function traceToText(inputFile, outputFile, options = {}) {
         }
       }
       if (kept.size === 0) continue;
-      
+
       outputLines.push(`
 [Thread: ${name}] (${tEvents.length} events)`);
       for (let i = 0; i < threadOutput.length; i++) {
@@ -217,7 +217,7 @@ export async function traceToText(inputFile, outputFile, options = {}) {
 }
 
 if (import.meta.url.endsWith(process?.argv[1]) || (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname))) {
-  const options = { limit: 150 };
+  const options = { };
   let inputFile = null;
   let outputFile = null;
 
