@@ -96,8 +96,15 @@ export async function traceToText(inputFile, outputFile, options = {}) {
   const findRegex = find ? new RegExp(find, 'i') : null;
   const outputLines = [];
 
-  if (summary) {
-    const stats = new Map();
+    const showSummary = summary && !find;
+
+  
+
+    if (showSummary) {
+
+      const stats = new Map(); 
+
+  
     for (const [key, tEvents] of threads) {
       tEvents.sort((a, b) => a.ts - b.ts || b.dur - a.dur);
       const stack = [];
