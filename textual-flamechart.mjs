@@ -19,6 +19,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {loadTraceEventsFromFile} from './trace-file-utils.mjs';
 
+const C = {
+  reset: '\x1b[0m',
+  bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m',
+  bgBlue: '\x1b[44m',
+};
+
 /**
  * Converts trace events into a human-readable text representation.
  *
@@ -54,13 +67,11 @@ export async function traceToText(inputFile, outputFile, options = {}) {
     return;
   }
 
-  // Determine global minTs from all events for relative offsets
   let globalMinTs = Infinity;
   for (const e of allDurationEvents) {
     if (e.ts < globalMinTs) globalMinTs = e.ts;
   }
 
-  // Filter by time range
   const rangeEvents = allDurationEvents.filter(e => {
     const eventStartMs = (e.ts - globalMinTs) / 1000;
     const eventEndMs = (e.ts + (e.dur || 0) - globalMinTs) / 1000;
@@ -72,11 +83,9 @@ export async function traceToText(inputFile, outputFile, options = {}) {
     return;
   }
 
-  // Determine threshold based on the desired limit of events to show in this range.
   const allDurs = rangeEvents.map(e => e.dur || 0).sort((a, b) => b - a);
   const thresholdMs = allDurs[Math.min(limit, allDurs.length) - 1] || 0;
 
-  // Group by PID/TID
   const threads = new Map();
   for (const e of rangeEvents) {
     const key = `${e.pid}:${e.tid}`;
@@ -88,7 +97,7 @@ export async function traceToText(inputFile, outputFile, options = {}) {
   const outputLines = [];
 
   if (summary) {
-    const stats = new Map(); // name -> {totalTime, selfTime, count}
+    const stats = new Map(); 
     for (const [key, tEvents] of threads) {
       tEvents.sort((a, b) => a.ts - b.ts || b.dur - a.dur);
       const stack = [];
@@ -96,13 +105,11 @@ export async function traceToText(inputFile, outputFile, options = {}) {
         while (stack.length > 0 && (stack[stack.length - 1].ts + stack[stack.length - 1].dur <= e.ts)) {
           stack.pop();
         }
-        
         if (!stats.has(e.name)) stats.set(e.name, {totalTime: 0, selfTime: 0, count: 0});
         const s = stats.get(e.name);
         s.totalTime += e.dur || 0;
         s.selfTime += e.dur || 0;
         s.count++;
-        
         if (stack.length > 0) {
           const parent = stats.get(stack[stack.length - 1].name);
           parent.selfTime -= e.dur || 0;
@@ -114,35 +121,35 @@ export async function traceToText(inputFile, outputFile, options = {}) {
     const sortedByTotal = Array.from(stats.entries()).sort((a, b) => b[1].totalTime - a[1].totalTime);
     const sortedBySelf = Array.from(stats.entries()).sort((a, b) => b[1].selfTime - a[1].selfTime);
 
-    outputLines.push('=== AGGREGATE SUMMARY (ms) ===');
-    outputLines.push('  ' + 'Total'.padStart(10) + '  ' + 'Self'.padStart(10) + '  ' + 'Count'.padStart(8) + '  ' + 'Event Name');
-    outputLines.push('  --- Top Total Time ---');
+    outputLines.push(`${C.bold}${C.bgBlue} === AGGREGATE SUMMARY (ms) === ${C.reset}`);
+    outputLines.push(`  ${C.dim}${'Total'.padStart(10)}  ${'Self'.padStart(10)}  ${'Count'.padStart(8)}  Event Name${C.reset}`);
+    outputLines.push(`  ${C.cyan}--- Top Total Time ---${C.reset}`);
     for (const [name, s] of sortedByTotal.slice(0, 10)) {
-      outputLines.push(`  ${(s.totalTime / 1000).toFixed(2).padStart(10)}  ${(s.selfTime / 1000).toFixed(2).padStart(10)}  ${String(s.count).padStart(8)}  ${name}`);
+      outputLines.push(`  ${C.green}${(s.totalTime / 1000).toFixed(2).padStart(10)}${C.reset}  ${(s.selfTime / 1000).toFixed(2).padStart(10)}  ${C.dim}${String(s.count).padStart(8)}${C.reset}  ${name}`);
     }
-    outputLines.push('  --- Top Self Time ---');
+    outputLines.push(`  ${C.cyan}--- Top Self Time ---${C.reset}`);
     for (const [name, s] of sortedBySelf.slice(0, 10)) {
-      outputLines.push(`  ${(s.totalTime / 1000).toFixed(2).padStart(10)}  ${(s.selfTime / 1000).toFixed(2).padStart(10)}  ${String(s.count).padStart(8)}  ${name}`);
+      outputLines.push(`  ${(s.totalTime / 1000).toFixed(2).padStart(10)}  ${C.green}${(s.selfTime / 1000).toFixed(2).padStart(10)}${C.reset}  ${C.dim}${String(s.count).padStart(8)}${C.reset}  ${name}`);
     }
     outputLines.push('');
   }
-
-  outputLines.push('Textual Flamechart | Columns: [Offset from start (ms)] [Duration (ms)] [Event Name]');
+  const columns = `[Offset (ms)] [Duration (ms)] [Event Name]${includeArgs ? ' [Args]' : ''}`;
+  outputLines.push(`${C.bold}Textual Flamechart${C.reset} | Columns: ${C.dim}${columns}${C.reset}`);
+  
   if (thresholdMs > 0) {
-    outputLines.push(`[Range: ${start}-${end === Infinity ? 'max' : end}ms | Showing ~${limit} events with duration >= ${(thresholdMs / 1000).toFixed(2)}ms]`);
+    const rangeStr = `${start}-${end === Infinity ? 'max' : end}ms`;
+    outputLines.push(`${C.yellow}[Range: ${rangeStr} | Showing ~${limit} events with duration >= ${(thresholdMs / 1000).toFixed(2)}ms]${C.reset}`);
   }
 
   const threadKeys = Array.from(threads.keys()).sort((a, b) => threads.get(b).length - threads.get(a).length);
 
   for (const key of threadKeys) {
     const tEvents = threads.get(key);
-    const [pid, tid] = key.split(':').map(Number);
-    const name = threadNames.get(key) || `Process ${pid} Thread ${tid}`;
+    const name = threadNames.get(key) || `Process ${key}`;
 
-    const visibleEventsInThread = tEvents.filter(e => e.dur >= thresholdMs);
-    if (visibleEventsInThread.length === 0) continue;
+    const hasVisibleEvents = tEvents.some(e => e.dur >= thresholdMs);
+    if (!hasVisibleEvents) continue;
 
-    // Build the tree for --find support
     tEvents.sort((a, b) => a.ts - b.ts || b.dur - a.dur);
     
     const threadOutput = [];
@@ -168,19 +175,19 @@ export async function traceToText(inputFile, outputFile, options = {}) {
 
       const startOffset = (e.ts - globalMinTs) / 1000.0;
       const duration = (e.dur || 0) / 1000.0;
-      const startStr = startOffset.toFixed(1).padStart(8);
-      const durStr = duration.toFixed(1).padStart(8);
+      const startStr = C.dim + startOffset.toFixed(1).padStart(8) + C.reset;
+      const durStr = C.green + duration.toFixed(1).padStart(8) + C.reset;
       const indent = '  '.repeat(stack.length);
       
       let line = `${indent}${startStr} ${durStr} ${cleanName}`;
-      if (includeArgs && e.args) {
-        line += ` | args: ${JSON.stringify(e.args)}`;
+      if (includeArgs && e.args && Object.keys(e.args).length > 0) {
+        line += ` ${C.dim}| args: ${JSON.stringify(e.args)}${C.reset}`;
       }
 
       const isMatch = findRegex ? (findRegex.test(cleanName) || (e.args && findRegex.test(JSON.stringify(e.args)))) : true;
       if (isMatch) matchesFoundInThread = true;
 
-      threadOutput.push({line, isMatch, depth: stack.length, ts: e.ts, end: e.ts + (e.dur || 0)});
+      threadOutput.push({line, isMatch, depth: stack.length});
       stack.push(e);
     }
 
@@ -200,34 +207,54 @@ export async function traceToText(inputFile, outputFile, options = {}) {
       }
       if (kept.size === 0) continue;
       
-      outputLines.push(`\n[Thread: ${name}] (${tEvents.length} events)`);
+      outputLines.push(`\n${C.bold}${C.magenta}[Thread: ${name}]${C.reset} ${C.dim}(${tEvents.length} events)${C.reset}`);
       for (let i = 0; i < threadOutput.length; i++) {
-        if (kept.has(i)) outputLines.push(threadOutput[i].line);
+        let line = threadOutput[i].line;
+        if (threadOutput[i].isMatch) line = line.replace(findRegex, m => `${C.bgBlue}${C.bold}${m}${C.reset}`);
+        if (kept.has(i)) outputLines.push(line);
       }
     } else {
-      outputLines.push(`\n[Thread: ${name}] (${tEvents.length} events)`);
+      outputLines.push(`\n${C.bold}${C.magenta}[Thread: ${name}]${C.reset} ${C.dim}(${tEvents.length} events)${C.reset}`);
       for (const item of threadOutput) outputLines.push(item.line);
     }
   }
 
-  outputLines.push('\n=== INVESTIGATION GUIDE ===');
-  outputLines.push('  - Use --start=MS --end=MS to zoom into a specific time window.');
-  outputLines.push('  - Use --limit=N to adjust the number of events shown in the tree.');
-  outputLines.push('  - Use --find="pattern" to filter the tree for specific event names or arguments.');
-  outputLines.push('  - Use --include-args to see the metadata (parameters) for each event.');
-  outputLines.push('  - Use --no-summary to hide the aggregate time tables.');
+  const isFiltering = find !== null || start !== 0 || (end !== Infinity && end !== 999999);
+  if (!isFiltering) {
+    const relPath = path.relative(process.cwd(), inputFile);
+    outputLines.push(`\n${C.bold}=== INVESTIGATION GUIDE ===${C.reset}`);
+    outputLines.push(`  ${C.cyan}1. High-Level Overview${C.reset}`);
+    outputLines.push(`     See which events consume the most time.`);
+    outputLines.push(`     ${C.dim}./textual-flamechart.mjs ${relPath} --summary --limit=0${C.reset}`);
+    
+    outputLines.push(`\n  ${C.cyan}2. Investigate Script Execution with Arguments${C.reset}`);
+    outputLines.push(`     Identify exactly which scripts were running.`);
+    outputLines.push(`     ${C.dim}./textual-flamechart.mjs ${relPath} --limit=50 --include-args --find="EvaluateScript"${C.reset}`);
+    
+    outputLines.push(`\n  ${C.cyan}3. Zoom into a specific "Jank" window${C.reset}`);
+    outputLines.push(`     Crop the trace to a specific timeframe (e.g. 3000ms-3500ms).`);
+    outputLines.push(`     ${C.dim}./textual-flamechart.mjs ${relPath} --start=3000 --end=3500 --limit=100${C.reset}`);
+    
+    outputLines.push(`\n  ${C.cyan}4. Trace specific Protocol Paths${C.reset}`);
+    outputLines.push(`     Search for specific events like "DispatchProtocolCommand".`);
+    outputLines.push(`     ${C.dim}./textual-flamechart.mjs ${relPath} --find="DispatchProtocolCommand" --limit=200${C.reset}`);
+    
+    outputLines.push(`\n  ${C.cyan}5. Deep Dive${C.reset}`);
+    outputLines.push(`     Combine zoom, summary, and arguments.`);
+    outputLines.push(`     ${C.dim}./textual-flamechart.mjs ${relPath} --start=2700 --end=3000 --summary --include-args --limit=50${C.reset}`);
+  }
 
   const outputContent = outputLines.join('\n');
   if (outputFile) {
-    fs.writeFileSync(outputFile, outputContent);
-    console.log(`Trace text saved to ${outputFile}`);
+    fs.writeFileSync(outputFile, outputContent.replace(/\x1b\[[0-9;]*m/g, ''));
+    console.log(`Trace text saved to ${outputFile} (colors stripped)`);
   } else {
     console.log(outputContent);
   }
 }
 
 if (import.meta.url.endsWith(process?.argv[1]) || (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname))) {
-  const options = { limit: 75, summary: true };
+  const options = { limit: 75, summary: true, start: 0, end: Infinity };
   let inputFile = null;
   let outputFile = null;
 
