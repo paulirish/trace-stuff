@@ -1,9 +1,15 @@
 #!/usr/bin/env node
 
 /**
- * This script produces a human-readable text-based call tree (textual flamegraph)
- * from a Chromium trace file. It shows thread-grouped events with their relative
- * start times, durations, and nesting depth via indentation.
+ * Textual Flamechart
+ *
+ * Usage:
+ *   ./textual-flamechart.mjs <input-trace.json> [output-file.txt] [--limit=150]
+ *
+ * Description:
+ *   This script produces a human-readable text-based call tree (textual flamegraph)
+ *   from a Chromium trace file. It shows thread-grouped events with their relative
+ *   start times, durations, and nesting depth via indentation.
  */
 
 import fs from 'node:fs';
@@ -16,9 +22,9 @@ import {loadTraceEventsFromFile} from './trace-file-utils.mjs';
  *
  * @param {string} inputFile
  * @param {string} [outputFile]
- * @param {number} [thresholdPercent=1]
+ * @param {number} [limit=150]
  */
-export async function traceToText(inputFile, outputFile, thresholdPercent = 1) {
+export async function traceToText(inputFile, outputFile, limit = 75) {
   const events = await loadTraceEventsFromFile(inputFile);
 
   const threadNames = new Map();
@@ -37,7 +43,11 @@ export async function traceToText(inputFile, outputFile, thresholdPercent = 1) {
     return;
   }
 
-  // Global start time and total duration for relative offsets and filtering
+  // Determine threshold based on the desired limit of events to show.
+  const allDurs = filteredEvents.map(e => e.dur || 0).sort((a, b) => b - a);
+  const thresholdMs = allDurs[Math.min(limit, allDurs.length) - 1] || 0;
+
+  // Global start time and total duration for relative offsets
   let minTs = Infinity;
   let maxEndTs = -Infinity;
   for (const e of filteredEvents) {
@@ -45,8 +55,6 @@ export async function traceToText(inputFile, outputFile, thresholdPercent = 1) {
     const endTs = e.ts + (e.dur || 0);
     if (endTs > maxEndTs) maxEndTs = endTs;
   }
-  const totalDuration = maxEndTs - minTs;
-  const thresholdMs = totalDuration * (thresholdPercent / 100);
 
   // Group by PID/TID
   const threads = new Map();
@@ -64,8 +72,12 @@ export async function traceToText(inputFile, outputFile, thresholdPercent = 1) {
   });
 
   const outputLines = [];
-  if (thresholdPercent > 0) {
-    outputLines.push(`[Filtering events < ${thresholdPercent}% of total trace duration (${(thresholdMs / 1000).toFixed(2)}ms)]`);
+
+  outputLines.push('Grouped by thread. Indentation represents call stack depth.');
+  outputLines.push('Columns: [Offset from start (ms)] [Duration (ms)] [Event Name]');
+
+  if (thresholdMs > 0) {
+    outputLines.push(`\n[Showing ~${limit} events with duration >= ${(thresholdMs / 1000).toFixed(2)}ms]`);
   }
 
   for (const key of threadKeys) {
@@ -74,8 +86,8 @@ export async function traceToText(inputFile, outputFile, thresholdPercent = 1) {
     const name = threadNames.get(key) || `Process ${pid} Thread ${tid}`;
 
     // Check if thread has any events after filtering
-    const visibleEvents = tEvents.filter(e => e.dur >= thresholdMs);
-    if (visibleEvents.length === 0) continue;
+    const hasVisibleEvents = tEvents.some(e => e.dur >= thresholdMs);
+    if (!hasVisibleEvents) continue;
 
     outputLines.push(`
 [Thread: ${name}] (${tEvents.length} events)`);
@@ -125,13 +137,13 @@ export async function traceToText(inputFile, outputFile, thresholdPercent = 1) {
 
 // CLI direct invocation
 if (import.meta.url.endsWith(process?.argv[1]) || (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname))) {
-  let threshold = 1;
+  let limit = undefined;
   let inputFile = null;
   let outputFile = null;
 
   for (const arg of process.argv.slice(2)) {
-    if (arg.startsWith('--threshold=')) {
-      threshold = parseFloat(arg.split('=')[1]);
+    if (arg.startsWith('--limit=')) {
+      limit = parseInt(arg.split('=')[1], 10);
     } else if (!inputFile) {
       inputFile = arg;
     } else if (!outputFile) {
@@ -140,9 +152,9 @@ if (import.meta.url.endsWith(process?.argv[1]) || (process.argv[1] && path.resol
   }
 
   if (!inputFile) {
-    console.error('Usage: node trace-to-text.mjs <input-trace.json> [output-file.txt] [--threshold=1]');
+    console.error('Usage: ./textual-flamechart.mjs <input-trace.json> [output-file.txt] [--limit=75]');
     process.exit(1);
   }
 
-  traceToText(inputFile, outputFile, threshold).catch(console.error);
+  traceToText(inputFile, outputFile, limit).catch(console.error);
 }
