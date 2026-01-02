@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 /**
  * This script produces a human-readable text-based call tree (textual flamegraph)
  * from a Chromium trace file. It shows thread-grouped events with their relative
@@ -36,8 +38,13 @@ export async function traceToText(inputFile, outputFile, thresholdPercent = 1) {
   }
 
   // Global start time and total duration for relative offsets and filtering
-  const minTs = Math.min(...filteredEvents.map(e => e.ts));
-  const maxEndTs = Math.max(...filteredEvents.map(e => e.ts + (e.dur || 0)));
+  let minTs = Infinity;
+  let maxEndTs = -Infinity;
+  for (const e of filteredEvents) {
+    if (e.ts < minTs) minTs = e.ts;
+    const endTs = e.ts + (e.dur || 0);
+    if (endTs > maxEndTs) maxEndTs = endTs;
+  }
   const totalDuration = maxEndTs - minTs;
   const thresholdMs = totalDuration * (thresholdPercent / 100);
 
@@ -65,7 +72,7 @@ export async function traceToText(inputFile, outputFile, thresholdPercent = 1) {
     const tEvents = threads.get(key);
     const [pid, tid] = key.split(':');
     const name = threadNames.get(key) || `Process ${pid} Thread ${tid}`;
-    
+
     // Check if thread has any events after filtering
     const visibleEvents = tEvents.filter(e => e.dur >= thresholdMs);
     if (visibleEvents.length === 0) continue;
@@ -95,7 +102,7 @@ export async function traceToText(inputFile, outputFile, thresholdPercent = 1) {
         const lastOpenParenIndex = rawName.lastIndexOf(' (');
         const baseName = rawName.substring(0, lastOpenParenIndex);
         let pathInfo = rawName.substring(lastOpenParenIndex + 2, rawName.length - 1);
-        
+
         const fileName = pathInfo.includes('/') ? pathInfo.split('/').pop() : pathInfo;
         cleanName = `${baseName} (${fileName})`;
       }
