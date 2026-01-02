@@ -55,7 +55,7 @@ test('traceToText summary statistics', async () => {
   await traceToText(TEST_TRACE, TEST_OUTPUT, { summary: true });
   const output = fs.readFileSync(TEST_OUTPUT, 'utf8');
   
-  assert.match(output, /=== SUMMARY/);
+  assert.match(output, /=== Aggregate Summaries/);
   // Root total: 1000, Root self: 1000 - 400 - 300 = 300
   assert.match(output, /1.00\s+0.30\s+1\s+Root/);
   cleanup();

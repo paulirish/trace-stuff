@@ -40,7 +40,7 @@ const C = {
  * @param {Object} [options]
  */
 export async function traceToText(inputFile, outputFile, options = {}) {
-  const {
+  let {
     limit = 75,
     start = 0,
     end = Infinity,
@@ -48,6 +48,8 @@ export async function traceToText(inputFile, outputFile, options = {}) {
     includeArgs = false,
     find = null
   } = options;
+
+  if (limit <= 0) limit = 75;
 
   const events = await loadTraceEventsFromFile(inputFile);
 
@@ -98,13 +100,13 @@ export async function traceToText(inputFile, outputFile, options = {}) {
 
     const showSummary = summary && !find;
 
-  
+
 
     if (showSummary) {
 
-      const stats = new Map(); 
+      const stats = new Map();
 
-  
+
     for (const [key, tEvents] of threads) {
       tEvents.sort((a, b) => a.ts - b.ts || b.dur - a.dur);
       const stack = [];
@@ -238,7 +240,7 @@ export async function traceToText(inputFile, outputFile, options = {}) {
     outputLines.push(`${C.bold}${C.bgBlue} === Investigation Guide === ${C.reset}`);
     outputLines.push(`  ${C.cyan}1. High-Level Overview${C.reset}`);
     outputLines.push(`     See which events consume the most time.`);
-    outputLines.push(`     ${C.dim}./textual-flamechart.mjs ${relPath} --summary --limit=0${C.reset}`);
+    outputLines.push(`     ${C.dim}./textual-flamechart.mjs ${relPath} --summary --limit=1000${C.reset}`);
 
     outputLines.push(`\n  ${C.cyan}2. Investigate Script Execution with Arguments${C.reset}`);
     outputLines.push(`     Identify exactly which scripts were running.`);
@@ -282,20 +284,20 @@ function printHelp() {
   console.log(`\n${C.bold}${C.bgBlue} === Investigation Guide === ${C.reset}`);
   console.log(`  ${C.cyan}1. High-Level Overview${C.reset}`);
   console.log(`     See which events consume the most time.`);
-  console.log(`     ${C.dim}./textual-flamechart.mjs ${relPath} --summary --limit=0${C.reset}`);
-  
+  console.log(`     ${C.dim}./textual-flamechart.mjs ${relPath} --summary --limit=1000${C.reset}`);
+
   console.log(`\n  ${C.cyan}2. Investigate Script Execution with Arguments${C.reset}`);
   console.log(`     Identify exactly which scripts were running.`);
   console.log(`     ${C.dim}./textual-flamechart.mjs ${relPath} --limit=50 --include-args --find="EvaluateScript"${C.reset}`);
-  
+
   console.log(`\n  ${C.cyan}3. Zoom into a specific "Jank" window${C.reset}`);
   console.log(`     Crop the trace to a specific timeframe (e.g. 3000ms-3500ms).`);
   console.log(`     ${C.dim}./textual-flamechart.mjs ${relPath} --start=3000 --end=3500 --limit=100${C.reset}`);
-  
+
   console.log(`\n  ${C.cyan}4. Trace specific Protocol Paths${C.reset}`);
   console.log(`     Search for specific events like "DispatchProtocolCommand".`);
   console.log(`     ${C.dim}./textual-flamechart.mjs ${relPath} --find="DispatchProtocolCommand" --limit=200${C.reset}`);
-  
+
   console.log(`\n  ${C.cyan}5. Deep Dive${C.reset}`);
   console.log(`     Combine zoom, summary, and arguments.`);
   console.log(`     ${C.dim}./textual-flamechart.mjs ${relPath} --start=2700 --end=3000 --summary --include-args --limit=50${C.reset}`);
