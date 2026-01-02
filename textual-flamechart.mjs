@@ -7,10 +7,10 @@
  *   ./textual-flamechart.mjs <input-trace.json> [output-file.txt] [options]
  *
  * Options:
- *   --limit=75       Target number of events to show (default: 75)
+ *   --limit=75        Target number of events to show (default: 75)
  *   --start=0         Start time in ms (relative to trace start)
- *   --end=999999      End time in ms (relative to trace start)
- *   --summary         Show aggregate time summary
+ *   --end=Infinity    End time in ms (relative to trace start)
+ *   --no-summary      Disable aggregate time summary
  *   --include-args    Show event arguments
  *   --find=pattern    Only show events (and their ancestors) matching pattern
  */
@@ -31,7 +31,7 @@ export async function traceToText(inputFile, outputFile, options = {}) {
     limit = 75,
     start = 0,
     end = Infinity,
-    summary = false,
+    summary = true,
     includeArgs = false,
     find = null
   } = options;
@@ -96,13 +96,13 @@ export async function traceToText(inputFile, outputFile, options = {}) {
         while (stack.length > 0 && (stack[stack.length - 1].ts + stack[stack.length - 1].dur <= e.ts)) {
           stack.pop();
         }
-
+        
         if (!stats.has(e.name)) stats.set(e.name, {totalTime: 0, selfTime: 0, count: 0});
         const s = stats.get(e.name);
         s.totalTime += e.dur || 0;
         s.selfTime += e.dur || 0;
         s.count++;
-
+        
         if (stack.length > 0) {
           const parent = stats.get(stack[stack.length - 1].name);
           parent.selfTime -= e.dur || 0;
@@ -111,10 +111,17 @@ export async function traceToText(inputFile, outputFile, options = {}) {
       }
     }
 
-    outputLines.push('=== SUMMARY (Aggregate Times in ms) ===');
+    const sortedByTotal = Array.from(stats.entries()).sort((a, b) => b[1].totalTime - a[1].totalTime);
+    const sortedBySelf = Array.from(stats.entries()).sort((a, b) => b[1].selfTime - a[1].selfTime);
+
+    outputLines.push('=== AGGREGATE SUMMARY (ms) ===');
     outputLines.push('  ' + 'Total'.padStart(10) + '  ' + 'Self'.padStart(10) + '  ' + 'Count'.padStart(8) + '  ' + 'Event Name');
-    const sortedStats = Array.from(stats.entries()).sort((a, b) => b[1].totalTime - a[1].totalTime);
-    for (const [name, s] of sortedStats.slice(0, 20)) {
+    outputLines.push('  --- Top Total Time ---');
+    for (const [name, s] of sortedByTotal.slice(0, 10)) {
+      outputLines.push(`  ${(s.totalTime / 1000).toFixed(2).padStart(10)}  ${(s.selfTime / 1000).toFixed(2).padStart(10)}  ${String(s.count).padStart(8)}  ${name}`);
+    }
+    outputLines.push('  --- Top Self Time ---');
+    for (const [name, s] of sortedBySelf.slice(0, 10)) {
       outputLines.push(`  ${(s.totalTime / 1000).toFixed(2).padStart(10)}  ${(s.selfTime / 1000).toFixed(2).padStart(10)}  ${String(s.count).padStart(8)}  ${name}`);
     }
     outputLines.push('');
@@ -137,7 +144,7 @@ export async function traceToText(inputFile, outputFile, options = {}) {
 
     // Build the tree for --find support
     tEvents.sort((a, b) => a.ts - b.ts || b.dur - a.dur);
-
+    
     const threadOutput = [];
     const stack = [];
     let matchesFoundInThread = false;
@@ -164,7 +171,7 @@ export async function traceToText(inputFile, outputFile, options = {}) {
       const startStr = startOffset.toFixed(1).padStart(8);
       const durStr = duration.toFixed(1).padStart(8);
       const indent = '  '.repeat(stack.length);
-
+      
       let line = `${indent}${startStr} ${durStr} ${cleanName}`;
       if (includeArgs && e.args) {
         line += ` | args: ${JSON.stringify(e.args)}`;
@@ -178,12 +185,10 @@ export async function traceToText(inputFile, outputFile, options = {}) {
     }
 
     if (findRegex) {
-      // Post-process threadOutput to only keep matches and their ancestors
       const kept = new Set();
       for (let i = 0; i < threadOutput.length; i++) {
         if (threadOutput[i].isMatch) {
           kept.add(i);
-          // Mark ancestors
           let depth = threadOutput[i].depth;
           for (let j = i - 1; j >= 0; j--) {
             if (threadOutput[j].depth < depth) {
@@ -194,18 +199,23 @@ export async function traceToText(inputFile, outputFile, options = {}) {
         }
       }
       if (kept.size === 0) continue;
-
-      outputLines.push(`
-[Thread: ${name}] (${tEvents.length} events)`);
+      
+      outputLines.push(`\n[Thread: ${name}] (${tEvents.length} events)`);
       for (let i = 0; i < threadOutput.length; i++) {
         if (kept.has(i)) outputLines.push(threadOutput[i].line);
       }
     } else {
-      outputLines.push(`
-[Thread: ${name}] (${tEvents.length} events)`);
+      outputLines.push(`\n[Thread: ${name}] (${tEvents.length} events)`);
       for (const item of threadOutput) outputLines.push(item.line);
     }
   }
+
+  outputLines.push('\n=== INVESTIGATION GUIDE ===');
+  outputLines.push('  - Use --start=MS --end=MS to zoom into a specific time window.');
+  outputLines.push('  - Use --limit=N to adjust the number of events shown in the tree.');
+  outputLines.push('  - Use --find="pattern" to filter the tree for specific event names or arguments.');
+  outputLines.push('  - Use --include-args to see the metadata (parameters) for each event.');
+  outputLines.push('  - Use --no-summary to hide the aggregate time tables.');
 
   const outputContent = outputLines.join('\n');
   if (outputFile) {
@@ -217,7 +227,7 @@ export async function traceToText(inputFile, outputFile, options = {}) {
 }
 
 if (import.meta.url.endsWith(process?.argv[1]) || (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname))) {
-  const options = { };
+  const options = { limit: 75, summary: true };
   let inputFile = null;
   let outputFile = null;
 
@@ -226,6 +236,7 @@ if (import.meta.url.endsWith(process?.argv[1]) || (process.argv[1] && path.resol
     else if (arg.startsWith('--start=')) options.start = parseFloat(arg.split('=')[1]);
     else if (arg.startsWith('--end=')) options.end = parseFloat(arg.split('=')[1]);
     else if (arg === '--summary') options.summary = true;
+    else if (arg === '--no-summary') options.summary = false;
     else if (arg === '--include-args') options.includeArgs = true;
     else if (arg.startsWith('--find=')) options.find = arg.split('=')[1];
     else if (!inputFile) inputFile = arg;
