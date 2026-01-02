@@ -266,10 +266,50 @@ export async function traceToText(inputFile, outputFile, options = {}) {
   }
 }
 
+function printHelp() {
+  const relPath = '<trace-file.json>';
+  console.log(`${C.bold}Textual Flamechart${C.reset}`);
+  console.log(`  Usage: ./textual-flamechart.mjs <input-trace.json> [output-file.txt] [options]\n`);
+  console.log(`${C.bold}Options:${C.reset}`);
+  console.log(`  ${C.cyan}--limit=N${C.reset}        Target number of events to show in the tree (default: 75)`);
+  console.log(`  ${C.cyan}--start=MS${C.reset}       Start time in ms (relative to trace start)`);
+  console.log(`  ${C.cyan}--end=MS${C.reset}         End time in ms (relative to trace start)`);
+  console.log(`  ${C.cyan}--no-summary${C.reset}     Disable the aggregate time summary tables`);
+  console.log(`  ${C.cyan}--include-args${C.reset}   Show event arguments in the tree`);
+  console.log(`  ${C.cyan}--find="pattern"${C.reset} Filter the tree for specific event names or arguments (case-insensitive)`);
+  console.log(`  ${C.cyan}--help${C.reset}           Show this help information`);
+
+  console.log(`\n${C.bold}${C.bgBlue} === Investigation Guide === ${C.reset}`);
+  console.log(`  ${C.cyan}1. High-Level Overview${C.reset}`);
+  console.log(`     See which events consume the most time.`);
+  console.log(`     ${C.dim}./textual-flamechart.mjs ${relPath} --summary --limit=0${C.reset}`);
+  
+  console.log(`\n  ${C.cyan}2. Investigate Script Execution with Arguments${C.reset}`);
+  console.log(`     Identify exactly which scripts were running.`);
+  console.log(`     ${C.dim}./textual-flamechart.mjs ${relPath} --limit=50 --include-args --find="EvaluateScript"${C.reset}`);
+  
+  console.log(`\n  ${C.cyan}3. Zoom into a specific "Jank" window${C.reset}`);
+  console.log(`     Crop the trace to a specific timeframe (e.g. 3000ms-3500ms).`);
+  console.log(`     ${C.dim}./textual-flamechart.mjs ${relPath} --start=3000 --end=3500 --limit=100${C.reset}`);
+  
+  console.log(`\n  ${C.cyan}4. Trace specific Protocol Paths${C.reset}`);
+  console.log(`     Search for specific events like "DispatchProtocolCommand".`);
+  console.log(`     ${C.dim}./textual-flamechart.mjs ${relPath} --find="DispatchProtocolCommand" --limit=200${C.reset}`);
+  
+  console.log(`\n  ${C.cyan}5. Deep Dive${C.reset}`);
+  console.log(`     Combine zoom, summary, and arguments.`);
+  console.log(`     ${C.dim}./textual-flamechart.mjs ${relPath} --start=2700 --end=3000 --summary --include-args --limit=50${C.reset}`);
+}
+
 if (import.meta.url.endsWith(process?.argv[1]) || (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname))) {
   const options = { limit: 75, summary: true, start: 0, end: Infinity };
   let inputFile = null;
   let outputFile = null;
+
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    printHelp();
+    process.exit(0);
+  }
 
   for (const arg of process.argv.slice(2)) {
     if (arg.startsWith('--limit=')) options.limit = parseInt(arg.split('=')[1], 10);
