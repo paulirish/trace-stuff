@@ -97,7 +97,7 @@ export async function traceToText(inputFile, outputFile, options = {}) {
   const outputLines = [];
 
   if (summary) {
-    const stats = new Map(); 
+    const stats = new Map();
     for (const [key, tEvents] of threads) {
       tEvents.sort((a, b) => a.ts - b.ts || b.dur - a.dur);
       const stack = [];
@@ -121,24 +121,30 @@ export async function traceToText(inputFile, outputFile, options = {}) {
     const sortedByTotal = Array.from(stats.entries()).sort((a, b) => b[1].totalTime - a[1].totalTime);
     const sortedBySelf = Array.from(stats.entries()).sort((a, b) => b[1].selfTime - a[1].selfTime);
 
-    outputLines.push(`${C.bold}${C.bgBlue} === AGGREGATE SUMMARY (ms) === ${C.reset}`);
+    outputLines.push(`${C.bold}${C.bgBlue} === Aggregate Summaries (ms) === ${C.reset}`);
     outputLines.push(`  ${C.dim}${'Total'.padStart(10)}  ${'Self'.padStart(10)}  ${'Count'.padStart(8)}  Event Name${C.reset}`);
-    outputLines.push(`  ${C.cyan}--- Top Total Time ---${C.reset}`);
+    outputLines.push(`  ${C.cyan}--- Top Total Duration ---${C.reset}`);
     for (const [name, s] of sortedByTotal.slice(0, 10)) {
       outputLines.push(`  ${C.green}${(s.totalTime / 1000).toFixed(2).padStart(10)}${C.reset}  ${(s.selfTime / 1000).toFixed(2).padStart(10)}  ${C.dim}${String(s.count).padStart(8)}${C.reset}  ${name}`);
     }
-    outputLines.push(`  ${C.cyan}--- Top Self Time ---${C.reset}`);
+    outputLines.push(`  ${C.cyan}--- Top Self Duration ---${C.reset}`);
     for (const [name, s] of sortedBySelf.slice(0, 10)) {
       outputLines.push(`  ${(s.totalTime / 1000).toFixed(2).padStart(10)}  ${C.green}${(s.selfTime / 1000).toFixed(2).padStart(10)}${C.reset}  ${C.dim}${String(s.count).padStart(8)}${C.reset}  ${name}`);
     }
     outputLines.push('');
   }
-  const columns = `[Offset (ms)] [Duration (ms)] [Event Name]${includeArgs ? ' [Args]' : ''}`;
-  outputLines.push(`${C.bold}Textual Flamechart${C.reset} | Columns: ${C.dim}${columns}${C.reset}`);
-  
+  outputLines.push(`${C.bold}${C.bgBlue} === Textual Flamechart === ${C.reset}`);
+  const columns = [
+    `${C.dim}[Offset (ms)]${C.reset}`,
+    `${C.green}[Total Duration (ms)]${C.reset}`,
+    `[Event Name]`,
+  ];
+  if (includeArgs) columns.push(`${C.dim}[Args]${C.reset}`);
+  outputLines.push(`${columns.join(' ')}`);
+
   if (thresholdMs > 0) {
     const rangeStr = `${start}-${end === Infinity ? 'max' : end}ms`;
-    outputLines.push(`${C.yellow}[Range: ${rangeStr} | Showing ~${limit} events with duration >= ${(thresholdMs / 1000).toFixed(2)}ms]${C.reset}`);
+    outputLines.push(`\n${C.yellow}[Range: ${rangeStr} | Showing ~${limit} events with duration >= ${(thresholdMs / 1000).toFixed(2)}ms]${C.reset}`);
   }
 
   const threadKeys = Array.from(threads.keys()).sort((a, b) => threads.get(b).length - threads.get(a).length);
@@ -151,7 +157,7 @@ export async function traceToText(inputFile, outputFile, options = {}) {
     if (!hasVisibleEvents) continue;
 
     tEvents.sort((a, b) => a.ts - b.ts || b.dur - a.dur);
-    
+
     const threadOutput = [];
     const stack = [];
     let matchesFoundInThread = false;
@@ -178,7 +184,7 @@ export async function traceToText(inputFile, outputFile, options = {}) {
       const startStr = C.dim + startOffset.toFixed(1).padStart(8) + C.reset;
       const durStr = C.green + duration.toFixed(1).padStart(8) + C.reset;
       const indent = '  '.repeat(stack.length);
-      
+
       let line = `${indent}${startStr} ${durStr} ${cleanName}`;
       if (includeArgs && e.args && Object.keys(e.args).length > 0) {
         line += ` ${C.dim}| args: ${JSON.stringify(e.args)}${C.reset}`;
@@ -206,7 +212,7 @@ export async function traceToText(inputFile, outputFile, options = {}) {
         }
       }
       if (kept.size === 0) continue;
-      
+
       outputLines.push(`\n${C.bold}${C.magenta}[Thread: ${name}]${C.reset} ${C.dim}(${tEvents.length} events)${C.reset}`);
       for (let i = 0; i < threadOutput.length; i++) {
         let line = threadOutput[i].line;
@@ -222,23 +228,23 @@ export async function traceToText(inputFile, outputFile, options = {}) {
   const isFiltering = find !== null || start !== 0 || (end !== Infinity && end !== 999999);
   if (!isFiltering) {
     const relPath = path.relative(process.cwd(), inputFile);
-    outputLines.push(`\n${C.bold}=== INVESTIGATION GUIDE ===${C.reset}`);
+    outputLines.push(`${C.bold}${C.bgBlue} === Investigation Guide === ${C.reset}`);
     outputLines.push(`  ${C.cyan}1. High-Level Overview${C.reset}`);
     outputLines.push(`     See which events consume the most time.`);
     outputLines.push(`     ${C.dim}./textual-flamechart.mjs ${relPath} --summary --limit=0${C.reset}`);
-    
+
     outputLines.push(`\n  ${C.cyan}2. Investigate Script Execution with Arguments${C.reset}`);
     outputLines.push(`     Identify exactly which scripts were running.`);
     outputLines.push(`     ${C.dim}./textual-flamechart.mjs ${relPath} --limit=50 --include-args --find="EvaluateScript"${C.reset}`);
-    
+
     outputLines.push(`\n  ${C.cyan}3. Zoom into a specific "Jank" window${C.reset}`);
     outputLines.push(`     Crop the trace to a specific timeframe (e.g. 3000ms-3500ms).`);
     outputLines.push(`     ${C.dim}./textual-flamechart.mjs ${relPath} --start=3000 --end=3500 --limit=100${C.reset}`);
-    
+
     outputLines.push(`\n  ${C.cyan}4. Trace specific Protocol Paths${C.reset}`);
     outputLines.push(`     Search for specific events like "DispatchProtocolCommand".`);
     outputLines.push(`     ${C.dim}./textual-flamechart.mjs ${relPath} --find="DispatchProtocolCommand" --limit=200${C.reset}`);
-    
+
     outputLines.push(`\n  ${C.cyan}5. Deep Dive${C.reset}`);
     outputLines.push(`     Combine zoom, summary, and arguments.`);
     outputLines.push(`     ${C.dim}./textual-flamechart.mjs ${relPath} --start=2700 --end=3000 --summary --include-args --limit=50${C.reset}`);
