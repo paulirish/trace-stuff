@@ -1,28 +1,22 @@
 {
-  "name": "trace-stuff",
-  "version": "1.0.0",
-  "description": "This repo is messy.",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/paulirish/trace-stuff.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "name": "perf-experiment",
+  "version": "0.1.0",
+  "description": "Statistically sound, reward-hack-resistant performance experiment evaluator",
   "type": "module",
-  "bugs": {
-    "url": "https://github.com/paulirish/trace-stuff/issues"
+  "bin": {
+    "perf-experiment": "./src/cli/index.ts"
   },
-  "homepage": "https://github.com/paulirish/trace-stuff#readme",
+  "scripts": {
+    "test": "node --experimental-strip-types --test src/browser.test.ts src/cli.test.ts src/guardrails.test.ts src/ledger.test.ts src/materializer.test.ts src/mutations.test.ts src/proxy.test.ts src/replay.test.ts src/stats.test.ts",
+    "lint": "pnpm dlx oxlint",
+    "format": "pnpm dlx oxfmt"
+  },
   "dependencies": {
-     "@paulirish/trace_engine": "latest"
+    "@paulirish/trace_engine": "latest",
+    "playwright-core": "^1.40.0",
+    "puppeteer-core": "^24.0.0"
   },
   "devDependencies": {
-    "@types/node": "^24.7.1",
-    "glob": "^11.0.3"
+    "@types/node": "^24.7.1"
   }
 }

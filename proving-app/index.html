@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Deterministic Data Grid Proving App</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; padding: 16px; background: #f9f9f9; }
+    #grid-filter { width: 300px; padding: 8px; font-size: 16px; margin-bottom: 12px; }
+    #summary-bar { font-size: 14px; margin-bottom: 12px; font-weight: bold; }
+    #grid-container { height: 400px; overflow-y: auto; border: 1px solid #ccc; background: #fff; }
+    .grid-row { height: 32px; line-height: 32px; padding: 0 8px; border-bottom: 1px solid #eee; cursor: pointer; }
+    .grid-row.selected { background: #e0f2fe; }
+    #detail-drawer { margin-top: 16px; padding: 12px; border: 1px solid #0284c7; background: #f0f9ff; display: none; }
+    #detail-drawer.open { display: block; }
+    .hidden-cheat { display: none !important; }
+  </style>
+</head>
+<body>
+  <h1>Data Grid Proving Application</h1>
+  <div>
+    <input id="grid-filter" data-testid="grid-filter" placeholder="Filter rows..." type="text" />
+    <span id="summary-bar"><span id="visible-count" data-testid="visible-row-count">20000 results</span></span>
+  </div>
+
+  <div id="grid-container" data-testid="grid-container">
+    <div id="row-viewport"></div>
+  </div>
+
+  <div id="detail-drawer" data-testid="detail-drawer">
+    <h3>Row Details</h3>
+    <p id="detail-content" data-testid="detail-content">No row selected</p>
+  </div>
+
+  <script>
+    (function() {
+      const params = new URLSearchParams(window.location.search);
+      const mutation = params.get('mutation') || '0';
+
+      const TOTAL_ROWS = 20000;
+      const rows = [];
+      let perfCount = 0;
+      for (let i = 0; i < TOTAL_ROWS; i++) {
+        const id = i + 1;
+        const isPerf = (i % 146 === 0) && perfCount < 137;
+        if (isPerf) perfCount++;
+        const name = isPerf ? `Item ${id} - performance optimization` : `Item ${id} - standard data payload ${i * 17 % 1000}`;
+        rows.push({ id, name, val: (i * 31) % 500 });
+      }
+
+      let filteredRows = [...rows];
+      let selectedRowId = null;
+
+      const filterInput = document.getElementById('grid-filter');
+      const visibleCountEl = document.getElementById('visible-count');
+      const viewport = document.getElementById('row-viewport');
+      const drawer = document.getElementById('detail-drawer');
+      const detailContent = document.getElementById('detail-content');
+
+      function renderGrid() {
+        if (mutation === '3') {
+          viewport.classList.add('hidden-cheat');
+        }
+
+        if (mutation === '1_baseline') {
+          const start = performance.now();
+          while (performance.now() - start < 50) {}
+          viewport.innerHTML = '';
+          for (let i = 0; i < 50; i++) {
+            const r = filteredRows[i];
+            if (!r) break;
+            const div = document.createElement('div');
+            div.className = 'grid-row' + (r.id === selectedRowId ? ' selected' : '');
+            div.dataset.testid = `row-${i + 1}`;
+            div.textContent = `#${r.id}: ${r.name} (${r.val})`;
+            div.onclick = () => selectRow(r, i + 1);
+            viewport.appendChild(div);
+          }
+        } else {
+          viewport.innerHTML = '';
+          const limit = Math.min(filteredRows.length, 50);
+          for (let i = 0; i < limit; i++) {
+            const r = filteredRows[i];
+            const div = document.createElement('div');
+            div.className = 'grid-row' + (r.id === selectedRowId ? ' selected' : '');
+            div.dataset.testid = `row-${i + 1}`;
+            div.textContent = `#${r.id}: ${r.name} (${r.val})`;
+            div.onclick = () => selectRow(r, i + 1);
+            viewport.appendChild(div);
+          }
+        }
+
+        visibleCountEl.textContent = `${filteredRows.length} results`;
+      }
+
+      function selectRow(rowObj, displayIdx) {
+        selectedRowId = rowObj.id;
+        detailContent.textContent = `Selected #${rowObj.id}: ${rowObj.name}`;
+        drawer.classList.add('open');
+        renderGrid();
+      }
+
+      filterInput.addEventListener('input', (e) => {
+        const query = e.target.value.trim().toLowerCase();
+
+        if (mutation === '5') {
+          if (query === 'performance') {
+            visibleCountEl.textContent = '137 results';
+            viewport.innerHTML = '<div class="grid-row" data-testid="row-3">Overfitted row 3</div>';
+            return;
+          }
+        }
+
+        if (mutation === '4') {
+          filteredRows = rows.filter(r => r.name.toLowerCase().includes(query));
+          visibleCountEl.textContent = `${filteredRows.length} results`;
+          setTimeout(() => {
+            const start = performance.now();
+            while (performance.now() - start < 250) {}
+          }, 50);
+          renderGrid();
+          return;
+        }
+
+        filteredRows = query === '' ? [...rows] : rows.filter(r => r.name.toLowerCase().includes(query));
+        renderGrid();
+      });
+
+      renderGrid();
+      window.__SEMANTIC_STATE__ = 'grid-ready';
+    })();
+  </script>
+</body>
+</html>
