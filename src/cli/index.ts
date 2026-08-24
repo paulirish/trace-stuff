@@ -17,6 +17,8 @@ async function main() {
   let campaign = 'default-campaign';
   let experimentPath: string | undefined;
   let outFile: string | undefined;
+  let networkArchive: string | undefined;
+  let networkMode: 'record' | 'replay' | 'passthrough' | undefined;
 
   for (let i = 1; i < args.length; i++) {
     const arg = args[i];
@@ -30,6 +32,13 @@ async function main() {
       experimentPath = args[++i];
     } else if (arg === '--out' && i + 1 < args.length) {
       outFile = args[++i];
+    } else if (arg === '--network-archive' && i + 1 < args.length) {
+      networkArchive = args[++i];
+    } else if (arg === '--network-mode' && i + 1 < args.length) {
+      const mode = args[++i];
+      if (mode === 'record' || mode === 'replay' || mode === 'passthrough') {
+        networkMode = mode;
+      }
     }
   }
 
@@ -39,6 +48,8 @@ async function main() {
       candidate,
       campaignId: campaign,
       experimentPath,
+      networkArchive,
+      networkMode,
     });
 
     const jsonOutput = JSON.stringify(outcome, null, 2);

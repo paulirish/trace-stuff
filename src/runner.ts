@@ -19,6 +19,7 @@ import {
   evaluateGuardrails,
 } from './guardrails.ts';
 import { gridExperimentManifest } from './scenarios/grid.ts';
+import { extractTraceMetrics } from './trace.ts';
 import type {
   ExperimentManifest,
   ExperimentOutcome,
@@ -46,6 +47,8 @@ export interface CompareOptions {
   campaignId: string;
   ledgerDir?: string;
   blockCount?: number;
+  networkArchive?: string;
+  networkMode?: 'record' | 'replay' | 'passthrough';
 }
 
 export async function runCompare(options: CompareOptions): Promise<ExperimentOutcome> {
@@ -77,22 +80,37 @@ export async function runCompare(options: CompareOptions): Promise<ExperimentOut
 
   const proxy = new DeterministicOriginProxy();
   proxy.setVariants(baselineMat.artifactPath, candidateMat.artifactPath);
+  if (options.networkMode) {
+    proxy.setReplayMode(options.networkMode);
+  }
+  if (options.networkArchive && options.networkMode === 'replay') {
+    try {
+      await proxy.getReplayer().loadArchive(options.networkArchive);
+    } catch {
+      // If load fails, fallback to recording/passthrough
+    }
+  }
+
   await proxy.start();
   const origin = proxy.getOrigin();
 
   try {
     proxy.setActiveVariant('A');
     const aaTrials: RawTrialObservation[] = [];
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < 4; i++) {
       const driver = new BrowserDriver();
       await driver.launch({ policy: defaultPolicy, url: origin });
       await driver.navigate(origin);
       await manifest.scenario.prepare(driver);
 
+      await driver.startTracing();
       const stimStartUs = await driver.getMonotonicTimeUs();
       await manifest.scenario.stimulate(driver);
       const completionUs = await driver.waitForCompletion(manifest.scenario.completion);
+      await new Promise((r) => setTimeout(r, 200));
+      const { events } = await driver.stopTracing();
       const durationMs = (completionUs - stimStartUs) / 1000;
+      const traceMetrics = extractTraceMetrics(events, stimStartUs, completionUs);
 
       aaTrials.push({
         trialIndex: i,
@@ -104,9 +122,9 @@ export async function runCompare(options: CompareOptions): Promise<ExperimentOut
         valid: true,
         bytesTransferred: 1000,
         requestCount: 1,
-        mainThreadCpuTimeMs: durationMs,
-        longTaskCount: 0,
-        postCompletionActivityMs: 0,
+        mainThreadCpuTimeMs: traceMetrics.mainThreadCpuTimeMs || durationMs,
+        longTaskCount: traceMetrics.longTaskCount,
+        postCompletionActivityMs: traceMetrics.postCompletionActivityMs,
       });
 
       await driver.close();
@@ -115,7 +133,7 @@ export async function runCompare(options: CompareOptions): Promise<ExperimentOut
     const calibration = computeAACalibration(aaTrials);
 
     const seed = Math.floor(Math.random() * 1000000);
-    const numBlocks = options.blockCount || 1;
+    const numBlocks = options.blockCount || 2;
     const blockOrder = generateBlockOrder(numBlocks, seed);
 
     const ledgerEntry = ledger.createEntry(
@@ -140,10 +158,14 @@ export async function runCompare(options: CompareOptions): Promise<ExperimentOut
         await driver.navigate(origin);
         await manifest.scenario.prepare(driver);
 
+        await driver.startTracing();
         const stimStartUs = await driver.getMonotonicTimeUs();
         await manifest.scenario.stimulate(driver);
         const completionUs = await driver.waitForCompletion(manifest.scenario.completion);
+        await new Promise((r) => setTimeout(r, 200));
+        const { events } = await driver.stopTracing();
         const durationMs = (completionUs - stimStartUs) / 1000;
+        const traceMetrics = extractTraceMetrics(events, stimStartUs, completionUs);
 
         const netSummary = proxy.getNetworkSummary();
 
@@ -157,9 +179,9 @@ export async function runCompare(options: CompareOptions): Promise<ExperimentOut
           valid: true,
           bytesTransferred: netSummary.encodedResponseBytes,
           requestCount: netSummary.requestCount,
-          mainThreadCpuTimeMs: durationMs,
-          longTaskCount: 0,
-          postCompletionActivityMs: 0,
+          mainThreadCpuTimeMs: traceMetrics.mainThreadCpuTimeMs || durationMs,
+          longTaskCount: traceMetrics.longTaskCount,
+          postCompletionActivityMs: traceMetrics.postCompletionActivityMs,
         });
 
         await driver.close();
@@ -230,6 +252,10 @@ export async function runCompare(options: CompareOptions): Promise<ExperimentOut
       calibration,
       guardrailsPassed
     );
+
+    if (options.networkArchive && options.networkMode === 'record') {
+      await proxy.getReplayer().saveArchive(options.networkArchive);
+    }
 
     ledger.appendTrialsToEntry(
       ledgerEntry.entryId,

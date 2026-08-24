@@ -116,7 +116,8 @@ export function evaluateExperimentOutcome(
   const meanDelta = calculateMean(deltas);
   const stdDelta = calculateStdDev(deltas);
   const n = Math.max(deltas.length, 1);
-  const stderr = stdDelta / Math.sqrt(n);
+  const effectiveStd = stdDelta > 0 ? stdDelta : Math.max(calibration.estimatedDetectableEffect, 0.005);
+  const stderr = effectiveStd / Math.sqrt(n);
   const tCrit = 2.0;
 
   const ciLowerLog = meanDelta - tCrit * stderr;

@@ -280,9 +280,8 @@ export class BrowserDriver implements ContextDriver {
           }
         }
         const children: SerializedDOMNode[] = [];
-        if (depth < 10) {
-          const maxChild = Math.min(node.childNodes.length, 50);
-          for (let i = 0; i < maxChild; i++) {
+        if (depth < 15) {
+          for (let i = 0; i < node.childNodes.length; i++) {
             const child = node.childNodes[i];
             if (child.nodeType === Node.ELEMENT_NODE) {
               children.push(serialize(child, depth + 1));
