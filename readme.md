@@ -72,7 +72,7 @@ npm test
 ```
 
 * https://github.com/ChromeDevTools/devtools-frontend/blob/main/front_end/models/trace/types/TraceEvents.ts hard to beat
-* https://github.com/GoogleChrome/lighthouse/blob/7d80178c37a1b600ea8f092fc0b098029799a659/types/artifacts.d.ts#L945-L1048 loosey goosey (also local here in `./types/chromium-trace.d.ts`)
+* https://github.com/GoogleChrome/lighthouse/blob/7d80178c37a1b600ea8f092fc0b098029799a659/types/artifacts.d.ts#L945-L1048 loosey goosey
 * https://github.com/connorjclark/chrome-trace-events-tsc brute force approach.
 * https://github.com/TracerBench/tracerbench/blob/master/packages/trace-event/src/types.ts nice. also tracerbench is pretty great, in general.
 

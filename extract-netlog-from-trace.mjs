@@ -8,7 +8,12 @@
 import path from 'node:path';
 import {loadTraceEventsFromFile, saveNetlog} from './trace-file-utils.mjs';
 
-/** @typedef {import('./types/chromium-trace').TraceEvent} TraceEvent */
+/**
+ * @typedef {import('@paulirish/trace_engine/models/trace/types/TraceEvents.js').Event & {
+ *   id: string,
+ *   args: {source_type: string, params?: Record<string, any>}
+ * }} TraceEvent
+ */
 /**
  * @typedef Netlog
  * @property {string} time
