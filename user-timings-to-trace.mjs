@@ -13,8 +13,17 @@
 
 import fs from 'fs';
 import path from 'path';
+import {
+  frameCommittedInBrowser,
+  metadata,
+  processName,
+  runTask,
+  threadName,
+  tracingStartedInBrowser,
+  userTiming,
+} from './gen/trace-event-factories.ts';
 
-/** @typedef {import('./types/chromium-trace').TraceEvent} TraceEvent */
+/** @typedef {import('@paulirish/trace_engine/models/trace/types/TraceEvents.js').Event} TraceEvent */
 
 /**
  * Generates a Chrome trace file from user timing measures
@@ -49,41 +58,37 @@ export function generateTraceEvents(entries, threadId = 8) {
   };
 
   function addBaselineTraceEvents() {
-    /** @type {TraceEvent} */
     const metaEvtBase = {
-      ...baseEvt,
+      pid: baseEvt.pid,
+      tid: baseEvt.tid,
+      ts: baseEvt.ts,
       cat: '__metadata',
-      ph: 'M',
     };
 
-    currentTrace.push({
+    currentTrace.push(metadata({
       ...metaEvtBase,
       name: 'process_labels',
       args: {labels: 'User Timing'},
-    });
+    }));
 
-    currentTrace.push({
+    currentTrace.push(threadName({
       ...metaEvtBase,
-      name: 'thread_name',
       args: {
         name: 'CrRendererMain',
       },
-    });
+    }));
 
-    currentTrace.push({
+    currentTrace.push(processName({
       ...metaEvtBase,
-      name: 'process_name',
       args: {
         name: 'Renderer',
       },
-    });
+    }));
 
     threadId === 8 &&
-      currentTrace.push({
-        ...metaEvtBase,
+      currentTrace.push(tracingStartedInBrowser({
+        ...baseEvt,
         cat: 'disabled-by-default-devtools.timeline',
-        name: 'TracingStartedInBrowser',
-        ph: 'I',
         // s: 't',
         args: {
           data: {
@@ -92,44 +97,40 @@ export function generateTraceEvents(entries, threadId = 8) {
             frames: [frameData],
           },
         },
-      });
+      }));
 
     threadId === 8 &&
-      currentTrace.push({
-        ...metaEvtBase,
+      currentTrace.push(frameCommittedInBrowser({
+        ...baseEvt,
         cat: 'disabled-by-default-devtools.timeline',
-        name: 'FrameCommittedInBrowser',
-        ph: 'I',
         args: {
           data: frameData,
         },
-      });
+      }));
   }
   addBaselineTraceEvents();
 
   entries.forEach((entry, i) => {
     if (entry.entryType === 'mark') {
-      const markEvt = {
+      const markEvt = userTiming({
         ...baseEvt,
         name: entry.name,
-        cat: 'blink.user_timing',
         ts: entry.startTime * 1000,
         ph: 'I',
-      };
+      });
       return currentTrace.push(markEvt);
     }
 
     /** @type {TraceEvent} */
-    const measureBeginEvt = {
+    const measureBeginEvt = userTiming({
       ...baseEvt,
       // FYI Colons in user_timing names get special handling in about:tracing you may not want. https://github.com/catapult-project/catapult/blob/b026043a43f9ce3f37c1cd57269f92cb8bee756c/tracing/tracing/extras/importer/trace_event_importer.html#L1643-L1654
       // But no adjustments made here.
       name: entry.name,
-      cat: 'blink.user_timing',
       ts: entry.startTime * 1000,
       id2: {local: '0x' + (i + 1).toString(16)},
       ph: 'b',
-    };
+    });
 
     const measureEndEvt = {
       ...measureBeginEvt,
@@ -146,14 +147,12 @@ export function generateTraceEvents(entries, threadId = 8) {
   const firstTs = (entries.at(0)?.startTime ?? 0) * 1000;
   const lastTs = currentTrace.at(-1)?.ts ?? currentTrace.reduce((acc, e) => (e.ts + (e.dur ?? 0) > acc ? e.ts + (e.dur ?? 0) : acc), 0);
   const finalTs = 2.1 * lastTs - firstTs;
-  const zeroEvent = {
+  const zeroEvent = runTask({
     ...baseEvt,
-    name: 'RunTask',
     cat: 'disabled-by-default-devtools.timeline',
-    ph: 'X',
     ts: firstTs * 0.9,
     dur: 2,
-  };
+  });
   const finalEvent = {
     ...zeroEvent,
     ts: finalTs,
