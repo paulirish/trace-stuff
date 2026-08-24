@@ -4,7 +4,9 @@
   "description": "This repo is messy.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "generate": "node generate-trace-events.ts",
+    "test": "node --test *.test.mjs *.test.ts && npm run type-check",
+    "type-check": "tsc --project ./tsconfig.trace-events.json"
   },
   "repository": {
     "type": "git",
@@ -18,11 +20,15 @@
     "url": "https://github.com/paulirish/trace-stuff/issues"
   },
   "homepage": "https://github.com/paulirish/trace-stuff#readme",
+  "exports": {
+    "./trace-event-factories": "./gen/trace-event-factories.ts"
+  },
   "dependencies": {
      "@paulirish/trace_engine": "latest"
   },
   "devDependencies": {
     "@types/node": "^24.7.1",
-    "glob": "^11.0.3"
+    "glob": "^11.0.3",
+    "typescript": "^6.0.3"
   }
 }

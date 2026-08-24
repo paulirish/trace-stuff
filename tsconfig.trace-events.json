@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "declarationMap": false,
+    "emitDeclarationOnly": false,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": [
+    "generate-trace-events.ts",
+    "generate-trace-events.test.ts",
+    "gen/trace-event-factories.ts"
+  ]
+}

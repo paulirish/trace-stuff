@@ -7,7 +7,7 @@
 
     "target": "esnext",
     "module": "nodenext",
-    "moduleResolution": "node",
+    "moduleResolution": "nodenext",
     "esModuleInterop": true,
 
     "allowJs": true,
@@ -37,6 +37,7 @@
     "*.js",
     "*.mjs",
     "*.mts",
+    "*.ts",
     // not third_party yet
 
 
