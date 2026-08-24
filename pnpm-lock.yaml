@@ -18,8 +18,16 @@ importers:
       glob:
         specifier: ^11.0.3
         version: 11.0.3
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
 
 packages:
+
+  typescript@6.0.3:
+    resolution: {}
+    engines: {node: '>=14.17'}
+    hasBin: true
 
   '@isaacs/balanced-match@4.0.1':
     resolution: {integrity: sha512-yzMTt9lEb8Gv7zRioUilSglI0c0smZ9k5D65677DLWLtWJaXIS3CqcGyUFByYKlnUj6TkjLVs54fBl6+TiGQDQ==}
@@ -169,6 +177,8 @@ packages:
     engines: {node: '>=12'}
 
 snapshots:
+
+  typescript@6.0.3: {}
 
   '@isaacs/balanced-match@4.0.1': {}
 

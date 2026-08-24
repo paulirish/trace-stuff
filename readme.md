@@ -42,6 +42,35 @@ See [github.com/paulirish/trace.cafe/blob/9aee52…/src/app.js#L9-L19](https://g
 
 ## Types
 
+### Creating typed trace events
+
+`gen/trace-event-factories.ts` provides one small factory function for every event interface in
+the trace engine. Required event data stays type checked, while fixed `name`,
+`ph`, and `cat` discriminants are filled in for you:
+
+```ts
+import {runTask} from './gen/trace-event-factories.ts';
+import * as Timing from '@paulirish/trace_engine/models/trace/types/Timing.js';
+import {ProcessID, ThreadID} from '@paulirish/trace_engine/models/trace/types/TraceEvents.js';
+
+const task = runTask({
+  cat: 'devtools.timeline',
+  pid: ProcessID(1),
+  tid: ThreadID(1),
+  ts: Timing.Micro(1_000),
+  dur: Timing.Micro(250),
+});
+```
+
+The file is generated with the TypeScript compiler API directly from the
+installed trace engine declarations.
+After updating `@paulirish/trace_engine`, regenerate and verify it with:
+
+```sh
+npm run generate
+npm test
+```
+
 * https://github.com/ChromeDevTools/devtools-frontend/blob/main/front_end/models/trace/types/TraceEvents.ts hard to beat
 * https://github.com/GoogleChrome/lighthouse/blob/7d80178c37a1b600ea8f092fc0b098029799a659/types/artifacts.d.ts#L945-L1048 loosey goosey (also local here in `./types/chromium-trace.d.ts`)
 * https://github.com/connorjclark/chrome-trace-events-tsc brute force approach.

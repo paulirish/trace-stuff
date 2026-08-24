@@ -1,4 +1,6 @@
 *.cpuprofile
+node_modules/
+.tmp/
 
 myjansatta.json
 coo.f.json
