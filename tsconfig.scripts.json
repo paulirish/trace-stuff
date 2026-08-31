@@ -8,9 +8,16 @@
     "types": ["node"]
   },
   "include": [
+    "bytes-in-trace-by-cat.ts",
+    "evaluate-screenshots.ts",
+    "events-with-arg.ts",
+    "extract-cpu-profile-from-trace.ts",
+    "format-trace.ts",
     "textual-flamechart.ts",
     "textual-flamechart.test.ts",
     "trace-file-utils.ts",
-    "trace-stream-parse.mts"
+    "trace-stream-parse.mts",
+    "winnow-trace.ts",
+    "winnow-trace.test.ts"
   ]
 }
