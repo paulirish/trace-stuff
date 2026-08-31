@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "declarationMap": false,
+    "emitDeclarationOnly": false,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": [
+    "textual-flamechart.ts",
+    "textual-flamechart.test.ts",
+    "trace-file-utils.ts",
+    "trace-stream-parse.mts"
+  ]
+}

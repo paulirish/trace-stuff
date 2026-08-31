@@ -1,14 +1,14 @@
 // Extract .cpuprofile from a trace.
 //
 // run like:
-//     node extract-cpu-profile-from-trace.mjs ~/Downloads/Profile-20200214T165958.json
+//     node extract-cpu-profile-from-trace.ts ~/Downloads/Profile-20200214T165958.json
 // it'll create 1 or more .cpuprofiles next to the trace
 
 
 import fs from 'fs';
 import path from 'node:path';
 import {strict as assert} from 'assert';
-import {saveCpuProfile, loadTraceEventsFromFile} from './trace-file-utils.mjs';
+import {saveCpuProfile, loadTraceEventsFromFile} from './trace-file-utils.ts';
 
 
 // A saved .cpuprofile from JS Profiler panel matches `Profiler.Profile` exactly.

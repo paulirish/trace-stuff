@@ -23,7 +23,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import pkg from 'protobufjs';
 const {Root} = pkg;
-import {saveTrace} from '../../trace-file-utils.mjs';
+import {saveTrace} from '../../trace-file-utils.ts';
 
 // Usage: node proto-to-json.ts path_to_trace.proto input_file output_file
 

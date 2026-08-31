@@ -17,7 +17,7 @@ import {glob} from 'glob';
 // import {MainThreadTasks as MainThreadTasks_} from 'lighthouse/core/lib/tracehouse/main-thread-tasks.js';
 
 // DevTools
-import {polyfillDOMRect} from '../trace_engine/analyze-trace.mjs';
+import {polyfillDOMRect} from '../trace_engine/analyze-trace.ts';
 import * as Trace from '../trace_engine/models/trace/trace.js';
 
 // import pkg from '@paulirish/trace_engine/package.json'  with { "type": "json" };
@@ -25,7 +25,7 @@ import * as Trace from '../trace_engine/models/trace/trace.js';
 // console.log('@paulirish/trace_engine', {version: pkg.version});
 
 // trace-stuff
-import {loadTraceEventsFromFile} from './trace-file-utils.mjs';
+import {loadTraceEventsFromFile} from './trace-file-utils.ts';
 
 // (async function main() {
 

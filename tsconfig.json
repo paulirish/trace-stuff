@@ -35,7 +35,6 @@
   "include": [
     "types/*.d.ts",
     "*.js",
-    "*.mjs",
     "*.mts",
     "*.ts",
     // not third_party yet

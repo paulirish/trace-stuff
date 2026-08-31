@@ -1,6 +1,6 @@
 import * as Trace from '@paulirish/trace_engine';
 
-import {isGzip} from './trace-file-utils.mjs';
+import {isGzip} from './trace-file-utils.ts';
 
 // https://chromium-review.googlesource.com/c/devtools/devtools-frontend/+/6941584
 
@@ -42,7 +42,7 @@ export async function parseTraceJsonAsStream(
 
   let stream = inputStream;
   stream = forceUngzip ? stream.pipeThrough(new DecompressionStream('gzip')) : stream;
-  stream = !plainStreamForTest ? stream.pipeThrough(chunker).pipeThrough(new TextDecoderStream('utf-8')) : plainStreamForTest;
+  stream = !plainStreamForTest ? stream.pipeThrough(chunker).pipeThrough(new TextDecoderStream('utf-8') as unknown as TransformStream<Uint8Array, string>) : plainStreamForTest;
   if (progressTracker) {
     stream = stream.pipeThrough(progressTracker);
   }
@@ -184,8 +184,8 @@ export class TraceEventStreamingParser extends TransformStream<string, ParserOut
 /**
  * make chunks BIGGER.
  */
-class ChunkSizer extends TransformStream {
-  #chunkSize;
+class ChunkSizer extends TransformStream<Uint8Array, Uint8Array> {
+  #chunkSize: number;
   #buffer = new Uint8Array(0);
 
   constructor({ chunkSize = 1024 * 1024 } = {}) { // Default to 1MB chunks
@@ -204,7 +204,7 @@ class ChunkSizer extends TransformStream {
     this.#chunkSize = chunkSize;
   }
 
-  #handleChunk(chunk, controller) {
+  #handleChunk(chunk: Uint8Array, controller: TransformStreamDefaultController<Uint8Array>): void {
     // Add the new chunk to our internal buffer.
     const newBuffer = new Uint8Array(this.#buffer.length + chunk.length);
     newBuffer.set(this.#buffer);

@@ -3,12 +3,12 @@
  *
  * Usage:
  *
- *     node bytes-in-trace-by-cat.mjs path/to/trace.json   (json.gz supported, too)
+ *     node bytes-in-trace-by-cat.ts path/to/trace.json   (json.gz supported, too)
  */
 
 import fs from 'node:fs';
 
-import {loadTraceEventsFromFile} from './trace-file-utils.mjs';
+import {loadTraceEventsFromFile} from './trace-file-utils.ts';
 
 const passedArg = process.argv[2];
 const filename = passedArg ? passedArg : '/Users/paulirish/Downloads/traces/cdt-clicks-frameseq-on-evtlat.json';

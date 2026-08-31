@@ -4,7 +4,7 @@
  * Textual Flamechart
  *
  * Usage:
- *   ./textual-flamechart.mjs <input-trace.json> [output-file.txt] [options]
+ *   ./textual-flamechart.ts <input-trace.json> [output-file.txt] [options]
  *
  * Options:
  *   --limit=75        Target number of events to show (default: 75)
@@ -17,7 +17,8 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import {loadTraceEventsFromFile} from './trace-file-utils.mjs';
+import * as TraceEvents from '@paulirish/trace_engine/models/trace/types/TraceEvents.js';
+import {loadTraceEventsFromFile} from './trace-file-utils.ts';
 
 const C = {
   reset: '\x1b[0m',
@@ -32,6 +33,15 @@ const C = {
   bgBlue: '\x1b[44m',
 };
 
+type TraceToTextOptions = {
+  limit?: number;
+  start?: number;
+  end?: number;
+  summary?: boolean;
+  includeArgs?: boolean;
+  find?: string|null;
+};
+
 /**
  * Converts trace events into a human-readable text representation.
  *
@@ -39,7 +49,7 @@ const C = {
  * @param {string} [outputFile]
  * @param {Object} [options]
  */
-export async function traceToText(inputFile, outputFile, options = {}) {
+export async function traceToText(inputFile: string, outputFile?: string|null, options: TraceToTextOptions = {}) {
   let {
     limit = 75,
     start = 0,
@@ -53,13 +63,13 @@ export async function traceToText(inputFile, outputFile, options = {}) {
 
   const events = await loadTraceEventsFromFile(inputFile);
 
-  const threadNames = new Map();
-  const allDurationEvents = [];
+  const threadNames = new Map<string, string>();
+  const allDurationEvents: TraceEvents.Complete[] = [];
 
   for (const e of events) {
-    if (e.ph === 'M' && e.name === 'thread_name') {
-      threadNames.set(`${e.pid}:${e.tid}`, e.args?.name);
-    } else if (e.ph === 'X') {
+    if (TraceEvents.isThreadName(e)) {
+      threadNames.set(`${e.pid}:${e.tid}`, String(e.args?.name ?? ''));
+    } else if (TraceEvents.isComplete(e)) {
       allDurationEvents.push(e);
     }
   }
@@ -88,15 +98,15 @@ export async function traceToText(inputFile, outputFile, options = {}) {
   const allDurs = rangeEvents.map(e => e.dur || 0).sort((a, b) => b - a);
   const thresholdMs = allDurs[Math.min(limit, allDurs.length) - 1] || 0;
 
-  const threads = new Map();
+  const threads = new Map<string, TraceEvents.Complete[]>();
   for (const e of rangeEvents) {
     const key = `${e.pid}:${e.tid}`;
     if (!threads.has(key)) threads.set(key, []);
-    threads.get(key).push(e);
+    threads.get(key)?.push(e);
   }
 
   const findRegex = find ? new RegExp(find, 'i') : null;
-  const outputLines = [];
+  const outputLines: string[] = [];
 
     const showSummary = summary && !find;
 
@@ -104,24 +114,25 @@ export async function traceToText(inputFile, outputFile, options = {}) {
 
     if (showSummary) {
 
-      const stats = new Map();
+      const stats = new Map<string, {totalTime: number, selfTime: number, count: number}>();
 
 
     for (const [key, tEvents] of threads) {
-      tEvents.sort((a, b) => a.ts - b.ts || b.dur - a.dur);
-      const stack = [];
+      tEvents.sort((a, b) => a.ts - b.ts || (b.dur ?? 0) - (a.dur ?? 0));
+      const stack: TraceEvents.Complete[] = [];
       for (const e of tEvents) {
-        while (stack.length > 0 && (stack[stack.length - 1].ts + stack[stack.length - 1].dur <= e.ts)) {
+        while (stack.length > 0 && (stack[stack.length - 1].ts + (stack[stack.length - 1].dur ?? 0) <= e.ts)) {
           stack.pop();
         }
         if (!stats.has(e.name)) stats.set(e.name, {totalTime: 0, selfTime: 0, count: 0});
         const s = stats.get(e.name);
+        if (!s) continue;
         s.totalTime += e.dur || 0;
         s.selfTime += e.dur || 0;
         s.count++;
         if (stack.length > 0) {
           const parent = stats.get(stack[stack.length - 1].name);
-          parent.selfTime -= e.dur || 0;
+          if (parent) parent.selfTime -= e.dur || 0;
         }
         stack.push(e);
       }
@@ -156,25 +167,26 @@ export async function traceToText(inputFile, outputFile, options = {}) {
     outputLines.push(`\n${C.yellow}[Range: ${rangeStr} | Showing ~${limit} events with duration >= ${(thresholdMs / 1000).toFixed(2)}ms]${C.reset}`);
   }
 
-  const threadKeys = Array.from(threads.keys()).sort((a, b) => threads.get(b).length - threads.get(a).length);
+  const threadKeys = Array.from(threads.keys()).sort((a, b) => (threads.get(b)?.length ?? 0) - (threads.get(a)?.length ?? 0));
 
   for (const key of threadKeys) {
     const tEvents = threads.get(key);
+    if (!tEvents) continue;
     const name = threadNames.get(key) || `Process ${key}`;
 
-    const hasVisibleEvents = tEvents.some(e => e.dur >= thresholdMs);
+    const hasVisibleEvents = tEvents.some(e => (e.dur ?? 0) >= thresholdMs);
     if (!hasVisibleEvents) continue;
 
-    tEvents.sort((a, b) => a.ts - b.ts || b.dur - a.dur);
+    tEvents.sort((a, b) => a.ts - b.ts || (b.dur ?? 0) - (a.dur ?? 0));
 
-    const threadOutput = [];
-    const stack = [];
+    const threadOutput: Array<{line: string, isMatch: boolean, depth: number}> = [];
+    const stack: TraceEvents.Complete[] = [];
     let matchesFoundInThread = false;
 
     for (const e of tEvents) {
-      if (e.dur < thresholdMs) continue;
+      if ((e.dur ?? 0) < thresholdMs) continue;
 
-      while (stack.length > 0 && (stack[stack.length - 1].ts + stack[stack.length - 1].dur <= e.ts)) {
+      while (stack.length > 0 && (stack[stack.length - 1].ts + (stack[stack.length - 1].dur ?? 0) <= e.ts)) {
         stack.pop();
       }
 
@@ -185,7 +197,7 @@ export async function traceToText(inputFile, outputFile, options = {}) {
         const baseName = rawName.substring(0, lastOpenParenIndex);
         let pathInfo = rawName.substring(lastOpenParenIndex + 2, rawName.length - 1);
         const fileName = pathInfo.includes('/') ? pathInfo.split('/').pop() : pathInfo;
-        cleanName = `${baseName} (${fileName})`;
+        cleanName = `${baseName} (${fileName ?? pathInfo})`;
       }
 
       const startOffset = (e.ts - globalMinTs) / 1000.0;
@@ -199,7 +211,7 @@ export async function traceToText(inputFile, outputFile, options = {}) {
         line += ` ${C.dim}| args: ${JSON.stringify(e.args)}${C.reset}`;
       }
 
-      const isMatch = findRegex ? (findRegex.test(cleanName) || (e.args && findRegex.test(JSON.stringify(e.args)))) : true;
+      const isMatch = findRegex ? (findRegex.test(cleanName) || Boolean(e.args && findRegex.test(JSON.stringify(e.args)))) : true;
       if (isMatch) matchesFoundInThread = true;
 
       threadOutput.push({line, isMatch, depth: stack.length});
@@ -240,23 +252,23 @@ export async function traceToText(inputFile, outputFile, options = {}) {
     outputLines.push(`${C.bold}${C.bgBlue} === Investigation Guide === ${C.reset}`);
     outputLines.push(`  ${C.cyan}1. High-Level Overview${C.reset}`);
     outputLines.push(`     See which events consume the most time.`);
-    outputLines.push(`     ${C.dim}./textual-flamechart.mjs ${relPath} --summary --limit=1000${C.reset}`);
+    outputLines.push(`     ${C.dim}./textual-flamechart.ts ${relPath} --summary --limit=1000${C.reset}`);
 
     outputLines.push(`\n  ${C.cyan}2. Investigate Script Execution with Arguments${C.reset}`);
     outputLines.push(`     Identify exactly which scripts were running.`);
-    outputLines.push(`     ${C.dim}./textual-flamechart.mjs ${relPath} --limit=50 --include-args --find="EvaluateScript"${C.reset}`);
+    outputLines.push(`     ${C.dim}./textual-flamechart.ts ${relPath} --limit=50 --include-args --find="EvaluateScript"${C.reset}`);
 
     outputLines.push(`\n  ${C.cyan}3. Zoom into a specific "Jank" window${C.reset}`);
     outputLines.push(`     Crop the trace to a specific timeframe (e.g. 3000ms-3500ms).`);
-    outputLines.push(`     ${C.dim}./textual-flamechart.mjs ${relPath} --start=3000 --end=3500 --limit=100${C.reset}`);
+    outputLines.push(`     ${C.dim}./textual-flamechart.ts ${relPath} --start=3000 --end=3500 --limit=100${C.reset}`);
 
     outputLines.push(`\n  ${C.cyan}4. Trace specific Protocol Paths${C.reset}`);
     outputLines.push(`     Search for specific events like "DispatchProtocolCommand".`);
-    outputLines.push(`     ${C.dim}./textual-flamechart.mjs ${relPath} --find="DispatchProtocolCommand" --limit=200${C.reset}`);
+    outputLines.push(`     ${C.dim}./textual-flamechart.ts ${relPath} --find="DispatchProtocolCommand" --limit=200${C.reset}`);
 
     outputLines.push(`\n  ${C.cyan}5. Deep Dive${C.reset}`);
     outputLines.push(`     Combine zoom, summary, and arguments.`);
-    outputLines.push(`     ${C.dim}./textual-flamechart.mjs ${relPath} --start=2700 --end=3000 --summary --include-args --limit=50${C.reset}`);
+    outputLines.push(`     ${C.dim}./textual-flamechart.ts ${relPath} --start=2700 --end=3000 --summary --include-args --limit=50${C.reset}`);
   }
 
   const outputContent = outputLines.join('\n');
@@ -271,7 +283,7 @@ export async function traceToText(inputFile, outputFile, options = {}) {
 function printHelp() {
   const relPath = '<trace-file.json>';
   console.log(`${C.bold}Textual Flamechart${C.reset}`);
-  console.log(`  Usage: ./textual-flamechart.mjs <input-trace.json> [output-file.txt] [options]\n`);
+  console.log(`  Usage: ./textual-flamechart.ts <input-trace.json> [output-file.txt] [options]\n`);
   console.log(`${C.bold}Options:${C.reset}`);
   console.log(`  ${C.cyan}--limit=N${C.reset}        Target number of events to show in the tree (default: 75)`);
   console.log(`  ${C.cyan}--start=MS${C.reset}       Start time in ms (relative to trace start)`);
@@ -284,29 +296,29 @@ function printHelp() {
   console.log(`\n${C.bold}${C.bgBlue} === Investigation Guide === ${C.reset}`);
   console.log(`  ${C.cyan}1. High-Level Overview${C.reset}`);
   console.log(`     See which events consume the most time.`);
-  console.log(`     ${C.dim}./textual-flamechart.mjs ${relPath} --summary --limit=1000${C.reset}`);
+  console.log(`     ${C.dim}./textual-flamechart.ts ${relPath} --summary --limit=1000${C.reset}`);
 
   console.log(`\n  ${C.cyan}2. Investigate Script Execution with Arguments${C.reset}`);
   console.log(`     Identify exactly which scripts were running.`);
-  console.log(`     ${C.dim}./textual-flamechart.mjs ${relPath} --limit=50 --include-args --find="EvaluateScript"${C.reset}`);
+  console.log(`     ${C.dim}./textual-flamechart.ts ${relPath} --limit=50 --include-args --find="EvaluateScript"${C.reset}`);
 
   console.log(`\n  ${C.cyan}3. Zoom into a specific "Jank" window${C.reset}`);
   console.log(`     Crop the trace to a specific timeframe (e.g. 3000ms-3500ms).`);
-  console.log(`     ${C.dim}./textual-flamechart.mjs ${relPath} --start=3000 --end=3500 --limit=100${C.reset}`);
+  console.log(`     ${C.dim}./textual-flamechart.ts ${relPath} --start=3000 --end=3500 --limit=100${C.reset}`);
 
   console.log(`\n  ${C.cyan}4. Trace specific Protocol Paths${C.reset}`);
   console.log(`     Search for specific events like "DispatchProtocolCommand".`);
-  console.log(`     ${C.dim}./textual-flamechart.mjs ${relPath} --find="DispatchProtocolCommand" --limit=200${C.reset}`);
+  console.log(`     ${C.dim}./textual-flamechart.ts ${relPath} --find="DispatchProtocolCommand" --limit=200${C.reset}`);
 
   console.log(`\n  ${C.cyan}5. Deep Dive${C.reset}`);
   console.log(`     Combine zoom, summary, and arguments.`);
-  console.log(`     ${C.dim}./textual-flamechart.mjs ${relPath} --start=2700 --end=3000 --summary --include-args --limit=50${C.reset}`);
+  console.log(`     ${C.dim}./textual-flamechart.ts ${relPath} --start=2700 --end=3000 --summary --include-args --limit=50${C.reset}`);
 }
 
 if (import.meta.url.endsWith(process?.argv[1]) || (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname))) {
-  const options = { limit: 75, summary: true, start: 0, end: Infinity };
-  let inputFile = null;
-  let outputFile = null;
+  const options: TraceToTextOptions = { limit: 75, summary: true, start: 0, end: Infinity };
+  let inputFile: string|null = null;
+  let outputFile: string|null = null;
 
   if (process.argv.includes('--help') || process.argv.includes('-h')) {
     printHelp();
@@ -326,7 +338,7 @@ if (import.meta.url.endsWith(process?.argv[1]) || (process.argv[1] && path.resol
   }
 
   if (!inputFile) {
-    console.error('Usage: ./textual-flamechart.mjs <input-trace.json> [output-file.txt] [options]');
+    console.error('Usage: ./textual-flamechart.ts <input-trace.json> [output-file.txt] [options]');
     process.exit(1);
   }
 
