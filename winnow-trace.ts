@@ -1,8 +1,10 @@
 // Use a filter predicate to remove excess stuff. eg: stripping down to a timerange, just removing `disabled-by-default.v8.compile`
 
 import path from 'node:path';
+import * as TraceEvents from '@paulirish/trace_engine/models/trace/types/TraceEvents.js';
+import * as Timing from '@paulirish/trace_engine/models/trace/types/Timing.js';
 import {saveTrace, loadTraceEventsFromFile} from './trace-file-utils.ts';
-import {extractCPUProfileData} from './extract-cpu-profile-from-trace.ts';
+import {extractCPUProfileData, type ExtractedCPUProfileData} from './extract-cpu-profile-from-trace.ts';
 
 /**
  * Usage:
@@ -17,14 +19,15 @@ import {extractCPUProfileData} from './extract-cpu-profile-from-trace.ts';
 
 const MIN_TS = 2401383928728;
 const MAX_TS = 2401384251864;
-const isTsWithinRange = (ts) => MIN_TS < ts && ts < MAX_TS;
+const isTsWithinRange = (ts: Timing.Micro): boolean => MIN_TS < ts && ts < MAX_TS;
 
 
-const eventNamesToExclude = []; // ['V8.ParseFunction', 'V8.CompileIgnition', 'V8.CompileIgnitionFinalization', 'v8.compile', 'V8.CompileCode']
+const eventNamesToExclude: string[] = []; // ['V8.ParseFunction', 'V8.CompileIgnition', 'V8.CompileIgnitionFinalization', 'v8.compile', 'V8.CompileCode']
+const eventsToRemove = new WeakSet<TraceEvents.Event>();
 
 
 // return true to keep. false to drop
-function filterEventFn(e, cpuProfileData) {
+function filterEventFn(e: TraceEvents.Event, cpuProfileData: ExtractedCPUProfileData[]): boolean {
   // Basics that need to be present regardless.
   if (e.name === 'TracingStartedInBrowser' || e.cat === '__metadata' || e.ts === 0) return true;
   if (typeof isTsWithinRange === 'function' && e.name === 'FrameCommittedInBrowser') return e.ts < MAX_TS;
@@ -33,7 +36,7 @@ function filterEventFn(e, cpuProfileData) {
 
   if (typeof isTsWithinRange === 'function') {
     adjustCPUProfilesForTimeCrop(e, cpuProfileData);
-    if (e.shouldRemove) return false;
+    if (eventsToRemove.has(e)) return false;
 
     return isTsWithinRange(e.ts);
   }
@@ -43,16 +46,19 @@ function filterEventFn(e, cpuProfileData) {
 
 
 // We need to adjust samples and timeDeltas arrays.
-function adjustCPUProfilesForTimeCrop(e, cpuProfileData) {
-  if (e.name === 'Profile') return true;
-  if (e.name.startsWith('ProfileChunk')) {
+function adjustCPUProfilesForTimeCrop(
+  e: TraceEvents.Event,
+  cpuProfileData: ExtractedCPUProfileData[],
+): void {
+  if (TraceEvents.isProfile(e)) return;
+  if (TraceEvents.isProfileChunk(e)) {
     const index = cpuProfileData.findIndex(d => d.id === e.id && d.pid === e.pid); // tid doesnt match on profilechunks becaose weird reasons.
     if (index !== -1) {
       const [cpuProfileDatum] = cpuProfileData.splice(index, 1);  // Remove from cpuProfileData so we can exclude later matching ProfileChunks
 
       let currentTime = cpuProfileDatum.profile.endTime; // We'll keep track of current time as we go through them
       for (let i = cpuProfileDatum.profile.samples.length - 1; i >= 0; i--) { // reverse loop to avoid index issues while shifting
-        const withinTimeRange = isTsWithinRange(currentTime);
+        const withinTimeRange = isTsWithinRange(Timing.Micro(currentTime));
         currentTime -= cpuProfileDatum.profile.timeDeltas[i];
         if (!withinTimeRange) {
           // Delete that sample and timeDelta
@@ -61,24 +67,34 @@ function adjustCPUProfilesForTimeCrop(e, cpuProfileData) {
         }
       }
       // Shouldn't make a diff but we'll recompute this end time, now that it's different.
-      cpuProfileDatum.profile.endTime = cpuProfileDatum.profile.timeDeltas.reduce((x, y) => x + y, cpuProfileDatum.profile.startTime);
+      cpuProfileDatum.profile.endTime = cpuProfileDatum.profile.timeDeltas.reduce(
+        (x, y) => x + y,
+        cpuProfileDatum.profile.startTime,
+      );
       // If samples array is > 125_507, this will trigger `Maximum callstack exceeded` in SamplesHandler due to a `.push(...samples)`
-      e.args.data.cpuProfile = cpuProfileDatum.profile;
-      e.args.data.timeDeltas = cpuProfileDatum.profile.timeDeltas;
-      e.args.data.lines = cpuProfileDatum.profile.lines;
+      e.args ??= {};
+      e.args.data ??= {};
+      // The trace-event declarations use branded values while the canonical CPU-profile
+      // model uses the CDP protocol's plain numeric fields. The runtime representation is identical.
+      e.args.data.cpuProfile = cpuProfileDatum.profile as unknown as TraceEvents.PartialProfile;
+      e.args.data.timeDeltas = cpuProfileDatum.profile.timeDeltas.map(Timing.Micro);
+      e.args.data.lines = cpuProfileDatum.profile.lines?.map(Timing.Micro);
     } else {
       // Remove because we already put all the data in an earlier one. Also, Dumb hack but hey.
-      e.shouldRemove = true;
+      eventsToRemove.add(e);
     }
   }
 }
 
-export async function resaveTrace(filename, filterEventFn) {
+export async function resaveTrace(
+  filename: string,
+  filterEvent: (event: TraceEvents.Event, cpuProfileData: ExtractedCPUProfileData[]) => boolean,
+): Promise<void> {
   const traceEvents = await loadTraceEventsFromFile(filename);
   console.log('Refomatting', traceEvents.length, 'events');
 
   const cpuProfileData = typeof isTsWithinRange === 'function' ? await Promise.all(extractCPUProfileData(traceEvents)) : [];
-  const afterTraceEvents = filteredTraceSort(traceEvents, e => filterEventFn(e, cpuProfileData));
+  const afterTraceEvents = filteredTraceSort(traceEvents, e => filterEvent(e, cpuProfileData));
 
   const afterFilename = `${filename}.winnowed.json`;
   await saveTrace({traceEvents: afterTraceEvents}, afterFilename);
@@ -92,7 +108,7 @@ if (import.meta.url.endsWith(process?.argv[1])) {
   cli();
 }
 
-async function cli() {
+async function cli(): Promise<void> {
   const filename = path.resolve(process.cwd(), process.argv[2]);
   await resaveTrace(filename, filterEventFn);
 }
@@ -110,9 +126,12 @@ async function cli() {
  * @param {LH.TraceEvent[]} traceEvents
  * @param {(e: LH.TraceEvent) => boolean} filter
  */
-function filteredTraceSort(traceEvents, filter) {
+export function filteredTraceSort(
+  traceEvents: TraceEvents.Event[],
+  filter: (event: TraceEvents.Event) => boolean,
+): TraceEvents.Event[] {
   // create an array of the indices that we want to keep
-  const indices = [];
+  const indices: number[] = [];
   for (let srcIndex = 0; srcIndex < traceEvents.length; srcIndex++) {
     if (filter(traceEvents[srcIndex])) {
       indices.push(srcIndex);
@@ -148,7 +167,7 @@ function filteredTraceSort(traceEvents, filter) {
   }
 
   // create a new array using the target indices from previous sort step
-  const sorted = [];
+  const sorted: TraceEvents.Event[] = [];
   for (let i = 0; i < indices.length; i++) {
     sorted.push(traceEvents[indices[i]]);
   }
@@ -175,11 +194,11 @@ function filteredTraceSort(traceEvents, filter) {
    * @return {number[]}
    */
   function _sortTimestampEventGroup(
-      tsGroupIndices,
-      timestampSortedIndices,
-      indexOfTsGroupIndicesStart,
-      traceEvents
-  ) {
+      tsGroupIndices: number[],
+      timestampSortedIndices: number[],
+      indexOfTsGroupIndicesStart: number,
+      traceEvents: TraceEvents.Event[],
+  ): number[] {
     /*
      * We have two different sets of indices going on here.
 
@@ -192,9 +211,9 @@ function filteredTraceSort(traceEvents, filter) {
      * Our final return value is an array of `ArrayIndex` in their final sort order.
      */
     /** @param {number} i */
-    const lookupArrayIndexByTsIndex = i => timestampSortedIndices[i];
+    const lookupArrayIndexByTsIndex = (i: number): number => timestampSortedIndices[i];
     /** @param {number} i */
-    const lookupEventByTsIndex = i => traceEvents[lookupArrayIndexByTsIndex(i)];
+    const lookupEventByTsIndex = (i: number): TraceEvents.Event => traceEvents[lookupArrayIndexByTsIndex(i)];
 
     /** @type {Array<number>} */
     const eEventIndices = [];
@@ -207,8 +226,8 @@ function filteredTraceSort(traceEvents, filter) {
       // See comment above for the distinction between `tsIndex` and `arrayIndex`.
       const arrayIndex = lookupArrayIndexByTsIndex(tsIndex);
       const event = lookupEventByTsIndex(tsIndex);
-      if (event.ph === 'E') eEventIndices.push(arrayIndex);
-      else if (event.ph === 'X' || event.ph === 'B') bxEventIndices.push(arrayIndex);
+      if (event.ph === TraceEvents.Phase.END) eEventIndices.push(arrayIndex);
+      else if (TraceEvents.isComplete(event) || event.ph === TraceEvents.Phase.BEGIN) bxEventIndices.push(arrayIndex);
       else otherEventIndices.push(arrayIndex);
     }
 
@@ -216,7 +235,7 @@ function filteredTraceSort(traceEvents, filter) {
     const effectiveDuration = new Map();
     for (const index of bxEventIndices) {
       const event = traceEvents[index];
-      if (event.ph === 'X') {
+      if (TraceEvents.isComplete(event)) {
         effectiveDuration.set(index, event.dur);
       } else {
         // Find the next available 'E' event *after* the current group of events that matches our name, pid, and tid.

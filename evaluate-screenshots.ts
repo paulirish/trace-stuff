@@ -4,6 +4,11 @@
  */
 
 import fs from 'node:fs';
+import type * as TraceEvents from '@paulirish/trace_engine/models/trace/types/TraceEvents.js';
+
+type TraceFile = {
+  traceEvents: TraceEvents.Event[];
+};
 
 const passedArg = process.argv[2];
 const filename = passedArg ? passedArg : './scroll-tl-viewer.json';
@@ -12,9 +17,9 @@ console.log('Parsing: ', filename);
 const stat = fs.statSync(filename);
 console.log('size:' ,  ( stat.size / 1_000_000).toLocaleString(), 'MB');
 
-let trace = JSON.parse(fs.readFileSync(filename, 'utf-8'));
+let trace = JSON.parse(fs.readFileSync(filename, 'utf-8')) as TraceFile|TraceEvents.Event[];
 
-if (trace.length) {
+if (Array.isArray(trace)) {
   const traceEvents = trace;
   trace = {
     traceEvents,
@@ -29,6 +34,10 @@ const screenshotEvts = trace.traceEvents.filter(e => {
 }).sort((a, b) => a.ts - b.ts);
 
 console.log('screenshot event count: ', screenshotEvts.length.toLocaleString())
+if (screenshotEvts.length === 0) {
+  console.log('No screenshot events found.');
+  process.exit(0);
+}
 const timeDeltas = screenshotEvts.map((evt, i) => {
   if (i === 0) return 0;
   return evt.ts - screenshotEvts[i - 1].ts
@@ -52,7 +61,7 @@ console.log({sizeSum: (sizeSum / 1000).toLocaleString() + ' kb'})
 
 
 
-const duration = (screenshotEvts.at(-1).ts - screenshotEvts.at(0).ts) / 1000;
+const duration = (screenshotEvts.at(-1)!.ts - screenshotEvts[0].ts) / 1000;
 console.log({duration});
 
 console.log('bitrate (bytes per sec): ', sizeSum / (duration / 1000));
@@ -61,4 +70,3 @@ console.log('bitrate (bytes per sec): ', sizeSum / (duration / 1000));
 
 const droppedFramePct = screenshotEvts.length / (duration / 16.66666);
 console.log('dropped frame %:', ((1 - droppedFramePct) * 100).toLocaleString())
-

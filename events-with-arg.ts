@@ -3,6 +3,16 @@
 
 
 import fs from 'node:fs';
+import type * as TraceEvents from '@paulirish/trace_engine/models/trace/types/TraceEvents.js';
+
+type TraceFile = {
+  traceEvents: TraceEvents.Event[];
+};
+
+type TraceTotal = {
+  bytes: number;
+  events: number;
+};
 
 const passedArg = process.argv[2];
 const filename = passedArg ? passedArg : './scroll-tl-viewer.json';
@@ -12,14 +22,14 @@ const stat = fs.statSync(filename);
 console.log('size:' ,  ( stat.size / 1_000_000).toLocaleString(), 'MB');
 console.log('first by event name + category. then by category');
 
-let trace = JSON.parse(fs.readFileSync(filename, 'utf-8'));
+let trace = JSON.parse(fs.readFileSync(filename, 'utf-8')) as TraceFile|TraceEvents.Event[];
 
 
 function cool() {
-  const eventNames = {};
+  const eventNames: Record<string, unknown> = {};
 
 
-  if (trace.length) {
+  if (Array.isArray(trace)) {
     const traceEvents = trace;
     trace = {
       traceEvents,
@@ -29,7 +39,7 @@ function cool() {
 
   trace.traceEvents.forEach(e => {
     let eventCats = e.cat;
-    const frame = e.args.frame ?? e.args.data?.frame;
+    const frame = e.args && 'frame' in e.args ? e.args.frame : e.args?.data?.frame;
 
     if (e.ph === 'R' || e.ph === 'I') return;
     if (frame) {
@@ -48,14 +58,18 @@ function cool() {
 } 
 
 
-cool(false);
+cool();
 
 
 
 
-function groupAndOutput(traceCats, totalBytes, totalEvents) {
+function groupAndOutput(
+  traceCats: Record<string, TraceTotal>,
+  totalBytes: number,
+  totalEvents: number,
+): void {
   // obj to array
-  const traceTotals = [];
+  const traceTotals: Array<TraceTotal & {name: string}> = [];
   Object.keys(traceCats).forEach(catname => {
     const cat = traceCats[catname];
     traceTotals.push({name: catname, bytes: cat.bytes, events: cat.events});

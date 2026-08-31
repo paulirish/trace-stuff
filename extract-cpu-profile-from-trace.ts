@@ -8,6 +8,9 @@
 import fs from 'fs';
 import path from 'node:path';
 import {strict as assert} from 'assert';
+import type * as CPUProfile from '@paulirish/trace_engine/models/cpu_profile/cpu_profile.js';
+import * as TraceEvents from '@paulirish/trace_engine/models/trace/types/TraceEvents.js';
+import * as Timing from '@paulirish/trace_engine/models/trace/types/Timing.js';
 import {saveCpuProfile, loadTraceEventsFromFile} from './trace-file-utils.ts';
 
 
@@ -21,10 +24,25 @@ import {saveCpuProfile, loadTraceEventsFromFile} from './trace-file-utils.ts';
 // See also go/cpu-profiler-notes which has plenty more stuff like this.
 
 
-export function extractCPUProfileData(events) {
+type CPUProfileWithSamples = CPUProfile.CPUProfileDataModel.ExtendedProfile & {
+    samples: number[];
+    timeDeltas: number[];
+};
+type ProfileNode = CPUProfile.CPUProfileDataModel.ExtendedProfileNode;
+
+export type ExtractedCPUProfileData = {
+    pid: TraceEvents.ProcessID;
+    tid: TraceEvents.ThreadID;
+    id: TraceEvents.ProfileID;
+    headTs: Timing.Micro;
+    profile: CPUProfileWithSamples;
+    threadName?: string;
+};
+
+export function extractCPUProfileData(events: TraceEvents.Event[]): Array<Promise<ExtractedCPUProfileData>> {
 
     // Cat = `disabled-by-default-v8.cpu_profiler`
-    const metaEvts = events.filter(e => e.cat === '__metadata');
+    const metaEvts = events.filter(TraceEvents.isThreadName);
 
     events = events.filter(e => e.cat.includes('v8.cpu_profiler'));
 
@@ -32,9 +50,9 @@ export function extractCPUProfileData(events) {
     console.log(events.length);
     // At this point e.name is either 'ProfileChunk' or 'Profile';
     // ProfileChunk events can be on a diff thread id than the header. but the header is canonical.
-    const profileHeadEvts = events.filter(e => e.name === 'Profile');
+    const profileHeadEvts = events.filter(TraceEvents.isProfile);
     // What pid's do we have?
-    const pidtids = profileHeadEvts.reduce((prev, curr) => prev.add(`p${curr.pid}t${curr.tid}`), new Set())
+    const pidtids = profileHeadEvts.reduce((prev, curr) => prev.add(`p${curr.pid}t${curr.tid}`), new Set<string>())
     // TODO: use this appraoch instead
     // const pidtids = profileHeadEvts.reduce((map_, evt) => {
     //     if (!map_.has(evt.pid)) {
@@ -47,26 +65,25 @@ export function extractCPUProfileData(events) {
 
     // See also `extractCpuProfile` in CDT's TimelineModel
     return Array.from(pidtids).map(async pidtid => {
-        const pid = parseInt(pidtid.split('t')[0].replace('p', ''), 10);
-        const tid = parseInt(pidtid.split('t')[1], 10);
+        const pid = TraceEvents.ProcessID(parseInt(pidtid.split('t')[0].replace('p', ''), 10));
+        const tid = TraceEvents.ThreadID(parseInt(pidtid.split('t')[1], 10));
         const threadName = metaEvts.find(e => e.pid === pid && e.tid === tid)?.args.name;
         console.log(`Looking at: "pid":${pid},"tid":${tid},  …  ${threadName}`);
 
         const profileHeadEvt = profileHeadEvts.find(e => e.pid === pid && e.tid === tid);
         // id's like 0x2. Match on id and also pid.
-        const chunkEvts = events.filter(e => e.name === 'ProfileChunk' && e.id === profileHeadEvt.id && e.pid === profileHeadEvt.pid); 
-
         if (!profileHeadEvt) {
-            return console.error('missing profile header evt.... probably resolvable but not now');
+            throw new Error('Missing profile header event');
         }
+        const chunkEvts = events.filter(TraceEvents.isProfileChunk)
+            .filter(e => e.id === profileHeadEvt.id && e.pid === profileHeadEvt.pid);
         if (!chunkEvts.length){
-            return console.error(`No chunk events for ${pidtid}!`);
+            throw new Error(`No chunk events for ${pidtid}!`);
         } 
             
         /** {Crdp.Profiler.Profile} */
-        const profile = {
+        const profile: CPUProfileWithSamples = {
             nodes: [],
-            startTime: -1,
             endTime: -1,
             samples: [],
             timeDeltas: [],
@@ -76,7 +93,8 @@ export function extractCPUProfileData(events) {
         // CPU profile generator makes chunks every 100 samples.. which seems really low IMO. 
         //     https://source.chromium.org/chromium/chromium/src/+/main:v8/src/profiler/profile-generator.cc;l=650-654;drc=4106e2406bd1b7219657a730bc389eb3a4629daa
         chunkEvts.forEach(chunk => {
-            const chunkData = chunk.args.data.cpuProfile;
+            const chunkData = chunk.args?.data?.cpuProfile as Partial<CPUProfile.CPUProfileDataModel.ExtendedProfile>|undefined;
+            if (!chunkData) return;
             profile.nodes.push(... chunkData.nodes || []);
             profile.samples.push(... chunkData.samples || []);
             // profile.lines is apparently also a thing (later me. whatttttttttt?) but i dont see that it does anything.. so ignoring for now.
@@ -84,7 +102,7 @@ export function extractCPUProfileData(events) {
 
 
             // Why is timeDeltas not in .args.data.cpuProfile???? beats me.
-            profile.timeDeltas.push(...  chunk.args.data.timeDeltas || []);
+            profile.timeDeltas.push(... chunk.args?.data?.timeDeltas || []);
             // shrug. https://source.chromium.org/chromium/chromium/src/+/main:v8/src/profiler/profile-generator.cc;l=755;bpv=0;bpt=1
             profile.endTime = chunkData.endTime || profile.endTime;
         });
@@ -117,7 +135,7 @@ export function extractCPUProfileData(events) {
 
 // nodes may missing children field but have parent field, rebuild children arrays then;
 // avoid updating children when nodes have parent and children fields
-export function convertParentIntoChildrenIfNeeded(data) {
+export function convertParentIntoChildrenIfNeeded(data: {nodes: ProfileNode[]}): void {
     const nodes = data.nodes;
 
     // no action when just one node or both first nodes has no parent (since only root node can has no parent)
@@ -126,7 +144,7 @@ export function convertParentIntoChildrenIfNeeded(data) {
     }
 
     // build map for nodes with no children only
-    const nodeWithNoChildrenById = new Map();
+    const nodeWithNoChildrenById = new Map<number, ProfileNode>();
 
     for (const node of data.nodes) {
         if (!Array.isArray(node.children) || node.children.length === 0) {
@@ -158,7 +176,7 @@ if (import.meta.url.endsWith(process?.argv[1])) {
   cli();
 }
 
-async function cli() {
+async function cli(): Promise<void> {
   const filename = path.resolve(process.cwd(), process.argv[2]);
 
   const traceEvents = await loadTraceEventsFromFile(filename);

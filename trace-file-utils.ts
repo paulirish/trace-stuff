@@ -6,6 +6,7 @@ import zlib from 'zlib';
 import {strict as assert} from 'assert';
 
 import {open, stat} from 'node:fs/promises';
+import type * as CPUProfile from '@paulirish/trace_engine/models/cpu_profile/cpu_profile.js';
 import type * as TraceEvents from '@paulirish/trace_engine/models/trace/types/TraceEvents.js';
 
 import {TraceEventStreamingParser, parseTraceJsonAsStream} from './trace-stream-parse.mts'
@@ -98,7 +99,10 @@ export async function saveTrace(trace: TraceFile, traceFilename: string): Promis
  * @param {string} cpuProfileFilename
  * @return {Promise<void>}
  */
-export function saveCpuProfile(profile: Record<string, unknown>, cpuProfileFilename: string): Promise<void> {
+export function saveCpuProfile(
+  profile: CPUProfile.CPUProfileDataModel.ExtendedProfile,
+  cpuProfileFilename: string,
+): Promise<void> {
   const writeStream = fs.createWriteStream(cpuProfileFilename);
 
   return stream.promises.pipeline(function* () {

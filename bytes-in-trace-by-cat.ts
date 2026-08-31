@@ -7,6 +7,7 @@
  */
 
 import fs from 'node:fs';
+import type * as TraceEvents from '@paulirish/trace_engine/models/trace/types/TraceEvents.js';
 
 import {loadTraceEventsFromFile} from './trace-file-utils.ts';
 
@@ -27,14 +28,17 @@ iterateTrace();
 iterateTrace({aggregateBy: true});
 
 
-function iterateTrace(opts = {aggregateBy: false}) {
-  const traceCats = {};
-  const tracePhs = {};
+type AggregateOptions = {aggregateBy: boolean};
+type TraceTotal = {bytes: number, count: number};
+
+function iterateTrace(opts: AggregateOptions = {aggregateBy: false}): void {
+  const traceCats: Record<string, TraceTotal> = {};
+  const tracePhs: Partial<Record<TraceEvents.Phase, number>> = {};
   // aggregate
   let totalBytes = 0;
   let totalEvents = 0;
 
-  let outofOrder = {};
+  const outofOrder: Record<string, number> = {};
     traceEvents.forEach((e, i) => {
 
       if (i > 0 && e.ts < traceEvents[i - 1].ts) {
@@ -59,8 +63,7 @@ function iterateTrace(opts = {aggregateBy: false}) {
       totalEvents += 1;
       traceCats[eventId] = cat;
     }
-    tracePhs[e.ph] = tracePhs[e.ph] || 0;
-    tracePhs[e.ph]++;
+    tracePhs[e.ph] = (tracePhs[e.ph] ?? 0) + 1;
   });
 
   reportTotals(traceCats, totalBytes, totalEvents, tracePhs, opts);
@@ -68,9 +71,15 @@ function iterateTrace(opts = {aggregateBy: false}) {
 }
 
 
-function reportTotals(traceCats, totalBytes, totalEvents, tracePhs, opts) {
+function reportTotals(
+  traceCats: Record<string, TraceTotal>,
+  totalBytes: number,
+  totalEvents: number,
+  _tracePhs: Partial<Record<TraceEvents.Phase, number>>,
+  opts: AggregateOptions,
+): void {
   // obj to array
-  const traceTotals = [];
+  const traceTotals: Array<TraceTotal & {name: string}> = [];
   Object.keys(traceCats).forEach(eventId => {
     const {bytes, count} = traceCats[eventId];
     traceTotals.push({name: eventId, bytes, count});
@@ -86,7 +95,7 @@ function reportTotals(traceCats, totalBytes, totalEvents, tracePhs, opts) {
     minimumFractionDigits: 0, maximumFractionDigits: 0,
     minimumSignificantDigits: 1, maximumSignificantDigits: 3
   });
-  const toKb = bytes => kbfmt.format(bytes / 1024);
+  const toKb = (bytes: number): string => kbfmt.format(bytes / 1024);
 
   const percentfmt = new Intl.NumberFormat('en', {
     maximumFractionDigits: 1, minimumFractionDigits: 1,
