@@ -5,8 +5,8 @@
   "main": "index.js",
   "scripts": {
     "generate": "node generate-trace-events.ts",
-    "test": "node --test *.test.mjs *.test.ts && npm run type-check",
-    "type-check": "tsc --project ./tsconfig.trace-events.json"
+    "test": "node --test *.test.ts && npm run type-check",
+    "type-check": "tsc --project ./tsconfig.trace-events.json && tsc --project ./tsconfig.scripts.json"
   },
   "repository": {
     "type": "git",

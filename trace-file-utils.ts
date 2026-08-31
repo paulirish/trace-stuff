@@ -6,8 +6,23 @@ import zlib from 'zlib';
 import {strict as assert} from 'assert';
 
 import {open, stat} from 'node:fs/promises';
+import type * as TraceEvents from '@paulirish/trace_engine/models/trace/types/TraceEvents.js';
 
 import {TraceEventStreamingParser, parseTraceJsonAsStream} from './trace-stream-parse.mts'
+
+type TraceFile = {
+  traceEvents: readonly TraceEvents.Event[];
+  metadata?: unknown;
+  [key: string]: unknown;
+};
+
+type Netlog = {
+  events: unknown[];
+  constants: unknown;
+  [key: string]: unknown;
+};
+
+export type LoadedTraceEvents = TraceEvents.Event[] & {metadata?: unknown};
 
 /**
  * Generates a JSON representation of an array of objects with the objects
@@ -15,7 +30,7 @@ import {TraceEventStreamingParser, parseTraceJsonAsStream} from './trace-stream-
  * @param {Array<unknown>} arrayOfObjects
  * @return {IterableIterator<string>}
  */
-function* arrayOfObjectsJsonGenerator(arrayOfObjects) {
+function* arrayOfObjectsJsonGenerator(arrayOfObjects: readonly unknown[]): IterableIterator<string> {
   const ITEMS_PER_ITERATION = 10_000;
 
   // Stringify and emit items separately to avoid a giant string in memory.
@@ -52,7 +67,7 @@ function* arrayOfObjectsJsonGenerator(arrayOfObjects) {
  * @param {Readonly<TraceEngine.Types.File.MetaData>|null} metadata
  * @return IterableIterator<string>
  */
-export function* traceJsonGenerator(trace) {
+export function* traceJsonGenerator(trace: TraceFile): IterableIterator<string> {
 const {traceEvents, metadata, ...rest} = trace;
   if (Object.keys(rest).length) throw new Error('unexpected contents in tracefile. not traceEvents or metadata! : ' + JSON.stringify(rest).slice(0, 1000));
 
@@ -70,7 +85,7 @@ const {traceEvents, metadata, ...rest} = trace;
  * @param {string} traceFilename
  * @return {Promise<void>}
  */
-export async function saveTrace(trace, traceFilename) {
+export async function saveTrace(trace: TraceFile, traceFilename: string): Promise<void> {
   const traceIter = traceJsonGenerator(trace);
   const writeStream = fs.createWriteStream(traceFilename);
 
@@ -83,7 +98,7 @@ export async function saveTrace(trace, traceFilename) {
  * @param {string} cpuProfileFilename
  * @return {Promise<void>}
  */
-export function saveCpuProfile(profile, cpuProfileFilename) {
+export function saveCpuProfile(profile: Record<string, unknown>, cpuProfileFilename: string): Promise<void> {
   const writeStream = fs.createWriteStream(cpuProfileFilename);
 
   return stream.promises.pipeline(function* () {
@@ -93,7 +108,7 @@ export function saveCpuProfile(profile, cpuProfileFilename) {
       if (key === 'nodes') { // i dont know ideal formatting for samples and timeDeltas
         // this relies on nodes always being first..
         yield `"${key}": `;
-        yield* arrayOfObjectsJsonGenerator(val);
+        yield* arrayOfObjectsJsonGenerator(val as unknown[]);
       } else {
         yield `,\n"${key}": `;
         yield JSON.stringify(val);
@@ -109,7 +124,7 @@ export function saveCpuProfile(profile, cpuProfileFilename) {
  * @return {Promise<void>}
  * @param {string} filename
  */
-export async function saveNetlog(netlog, filename) {
+export async function saveNetlog(netlog: Netlog, filename: string): Promise<void> {
   const writeStream = fs.createWriteStream(filename);
 
   const {events, constants, ...rest} = netlog;
@@ -132,7 +147,7 @@ export async function saveNetlog(netlog, filename) {
  * @deprecated use `loadTraceEventsFromFile` instead.
  * @param {string} filePath Can be an absolute or relative path.
  */
-export function readJson(filePath) {
+export function readJson(filePath: string): unknown {
   // filePath = path.resolve(dir, filePath);
   return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
 }
@@ -141,16 +156,16 @@ export function readJson(filePath) {
  * @param {string} filename
  * @returns TraceEvent[]
  */
-export async function loadTraceEventsFromFile(filename) {
+export async function loadTraceEventsFromFile(filename: string): Promise<LoadedTraceEvents> {
   if (!fs.existsSync(filename)) {
     throw new Error('File not found. ' + filename);
   }
-  let fileBuf = fs.readFileSync(filename);
-  let data;
-  let json;
+  const fileBuf = fs.readFileSync(filename);
+  let data = '';
+  let json: TraceFile|unknown[];
   try {
     if (isGzip(fileBuf)) {
-      data = zlib.gunzipSync(fileBuf);
+      data = zlib.gunzipSync(fileBuf).toString('utf8');
     } else {
       data = fileBuf.toString('utf8');
     }
@@ -158,22 +173,21 @@ export async function loadTraceEventsFromFile(filename) {
   }catch (e) {
     const {size} = await stat(filename);
     const forceUngzip = isGzip(fileBuf);
-    fileBuf = undefined;
     const file = await open(filename);
     const readStream = file.readableWebStream({});
     // const file = new File([fileBuf], 'trace.json', {type: 'application/json'});
-    json = await parseTraceJsonAsStream(readStream, {forceUngzip, size});
+    json = await parseTraceJsonAsStream(readStream as unknown as ReadableStream, {forceUngzip, size}) as TraceFile;
 
     await file.close();
     // console.warn('omg error unzipping. trying as utf8', e);
   }
 
   // clear memory
-  fileBuf = data = '';
-  const traceEvents = json.traceEvents ?? json;
+  data = '';
+  const traceEvents = ('traceEvents' in json ? json.traceEvents : json) as LoadedTraceEvents;
   assert.ok(Array.isArray(traceEvents) && traceEvents.length, 'No trace events array');
   // TODO, do something less gross.
-  traceEvents.metadata = json.metadata;
+  traceEvents.metadata = 'metadata' in json ? json.metadata : undefined;
   return traceEvents;
 }
 
@@ -183,8 +197,10 @@ export async function loadTraceEventsFromFile(filename) {
  * @param {ArrayBuffer} ab
  * @returns boolean
  */
-export function isGzip(ab) {
-  const buf = new Uint8Array(ab);
+export function isGzip(ab: ArrayBuffer|ArrayBufferView) {
+  const buf = ab instanceof ArrayBuffer
+    ? new Uint8Array(ab)
+    : new Uint8Array(ab.buffer, ab.byteOffset, ab.byteLength);
   if (!buf || buf.length < 3) {
     return false;
   }

@@ -2,11 +2,11 @@
 //
 // In perfetto, "convert to json"
 // Run:
-//     node ./extract-netlog-from-trace.mjs ~/Downloads/Trace.json          
+//     node ./extract-netlog-from-trace.ts ~/Downloads/Trace.json
 // If there are errors about file too big, sorry. You can try removing all non-netlog trace events from trace.
 
 import path from 'node:path';
-import {loadTraceEventsFromFile, saveNetlog} from './trace-file-utils.mjs';
+import {loadTraceEventsFromFile, saveNetlog} from './trace-file-utils.ts';
 
 /**
  * @typedef {import('@paulirish/trace_engine/models/trace/types/TraceEvents.js').Event & {
@@ -121,7 +121,7 @@ async function cli() {
   const netlog = extractNetlog(traceEvents);
   console.log(`counts:
     eventTypes: ${Object.keys(netlog.constants.logEventTypes).length},
-    sourceTypes: ${Object.keys(netlog.constants.logSourceType).length}, 
+    sourceTypes: ${Object.keys(netlog.constants.logSourceType).length},
     events: ${netlog.events.length.toLocaleString()}`);
 
   const netlogFilename = `${filename}.netlog.json`;

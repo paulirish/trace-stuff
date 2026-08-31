@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {generateTraceEvents} from './user-timings-to-trace.mjs';
+import {generateTraceEvents} from './user-timings-to-trace.ts';
 
 test('generated user timings use the expected trace event discriminants', () => {
   const events = generateTraceEvents([

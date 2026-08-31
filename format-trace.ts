@@ -2,7 +2,7 @@
 // Save a "properly formatted" version of the trace (with a new filename). 
 
 import path from 'node:path';
-import {saveTrace, loadTraceEventsFromFile} from './trace-file-utils.mjs';
+import {saveTrace, loadTraceEventsFromFile} from './trace-file-utils.ts';
 
 export async function resaveTrace(filename, filterEventFn) {
   const traceEvents = await loadTraceEventsFromFile(filename);

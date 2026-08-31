@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
-import { traceToText } from './textual-flamechart.mjs';
+import { traceToText } from './textual-flamechart.ts';
 
 const TEST_TRACE = 'test-trace-tmp.json';
 const TEST_OUTPUT = 'test-output-tmp.txt';

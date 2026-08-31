@@ -21,11 +21,11 @@
  * 
  * Usage:
  * 
- *     node generic-trace-to-devtools-trace.mjs somefile.json
+ *     node generic-trace-to-devtools-trace.ts somefile.json
  */
 
 
-import {loadTraceEventsFromFile, saveTrace} from './trace-file-utils.mjs';
+import {loadTraceEventsFromFile, saveTrace} from './trace-file-utils.ts';
 
 const passedArg = process.argv[2];
 const tracefilename = passedArg ? passedArg : './myjansatta.json';

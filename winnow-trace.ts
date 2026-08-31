@@ -1,8 +1,8 @@
 // Use a filter predicate to remove excess stuff. eg: stripping down to a timerange, just removing `disabled-by-default.v8.compile`
 
 import path from 'node:path';
-import {saveTrace, loadTraceEventsFromFile} from './trace-file-utils.mjs';
-import {extractCPUProfileData} from './extract-cpu-profile-from-trace.mjs';
+import {saveTrace, loadTraceEventsFromFile} from './trace-file-utils.ts';
+import {extractCPUProfileData} from './extract-cpu-profile-from-trace.ts';
 
 /**
  * Usage:
